@@ -239,7 +239,14 @@ class ReportService:
             return req.report_status
 
     def cancel(self, request_id, *, by_user, reason: str) -> ReportRequest:
-        """Staff cancellation: also cancels open payment links and closes the follow-up."""
+        """Staff/customer cancellation: also cancels open payment links and closes the follow-up."""
+        return self.close(request_id, by_user=by_user, reason=reason, final_status=ReportStatus.CANCELLED)
+
+    def expire(self, request_id, *, reason: str) -> ReportRequest:
+        """Timed out (abandoned, or generated but never paid). Same tidy-up as a cancellation."""
+        return self.close(request_id, by_user=None, reason=reason, final_status=ReportStatus.EXPIRED)
+
+    def close(self, request_id, *, by_user, reason: str, final_status: str) -> ReportRequest:
         from apps.followups.models import FollowUpStatus, ReminderStatus
         from apps.payments.gateway import get_payment_gateway
 
@@ -247,9 +254,7 @@ class ReportService:
             req = ReportRequest.objects.select_for_update().get(pk=request_id)
             if req.payment_links.filter(status=PaymentLinkStatus.PAID).exists():
                 raise InvalidTransition(f"{req.public_ref}: already paid; refund instead of cancelling")
-            req.transition_to(
-                ReportStatus.CANCELLED, failure_code="cancelled_by_staff", failure_detail=reason
-            )
+            req.transition_to(final_status, failure_code=f"{final_status}", failure_detail=reason)
             req.save()
             open_links = list(
                 req.payment_links.filter(status__in=[PaymentLinkStatus.PENDING, PaymentLinkStatus.ACTIVE])
@@ -259,13 +264,24 @@ class ReportService:
                 link.save(update_fields=["status"])
             followup = getattr(req, "followup", None)
             if followup is not None and followup.is_open:
-                followup.status, followup.closed_at = FollowUpStatus.CLOSED_MANUAL, timezone.now()
-                followup.close_reason, followup.next_reminder_at = f"Request cancelled: {reason}"[:255], None
+                lost = final_status == ReportStatus.EXPIRED
+                followup.status = FollowUpStatus.CLOSED_LOST if lost else FollowUpStatus.CLOSED_MANUAL
+                followup.closed_at = timezone.now()
+                followup.close_reason, followup.next_reminder_at = (
+                    f"Request {final_status}: {reason}"[:255],
+                    None,
+                )
                 followup.save()
                 followup.reminders.filter(status=ReminderStatus.SCHEDULED).update(
-                    status=ReminderStatus.CANCELLED, skip_reason="request_cancelled"
+                    status=ReminderStatus.CANCELLED, skip_reason=f"request_{final_status}"
                 )
-            audit.record("report.cancelled", actor=by_user, obj=req, changes={"reason": reason})
+            audit.record(
+                f"report.{final_status}",
+                actor=by_user,
+                actor_type=None if by_user else "system",
+                obj=req,
+                changes={"reason": reason},
+            )
         gateway = get_payment_gateway()
         for link in open_links:
             if link.razorpay_link_id:

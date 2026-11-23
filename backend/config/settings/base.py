@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parents[2]  # backend/
 REPO_ROOT = BASE_DIR.parent
@@ -134,6 +135,14 @@ PAYMENT_LINK_EXPIRY_HOURS = env.int("PAYMENT_LINK_EXPIRY_HOURS", default=72)
 FOLLOWUP_REMINDER_OFFSETS_HOURS = [
     int(h) for h in env.list("FOLLOWUP_REMINDER_OFFSETS_HOURS", default=["1", "24", "72"])
 ]
+# Follow-up automation (Phase 8)
+REMINDER_DISPATCH_BATCH = env.int("REMINDER_DISPATCH_BATCH", default=100)
+FOLLOWUP_ESCALATE_AFTER_HOURS = env.int("FOLLOWUP_ESCALATE_AFTER_HOURS", default=48)  # unpaid this long...
+FOLLOWUP_ESCALATE_QUIET_HOURS = env.int(
+    "FOLLOWUP_ESCALATE_QUIET_HOURS", default=24
+)  # ...and no note this long
+FOLLOWUP_MAX_ESCALATION = env.int("FOLLOWUP_MAX_ESCALATION", default=3)
+STALE_REQUEST_MINUTES = env.int("STALE_REQUEST_MINUTES", default=60)  # unfinished details/consent/OTP
 WHATSAPP_TEMPLATE_LANGUAGE = env("WHATSAPP_TEMPLATE_LANGUAGE", default="en")
 # Logical name -> approved WhatsApp template name. Needed outside the 24-hour service window.
 WHATSAPP_TEMPLATES = {
@@ -206,14 +215,23 @@ CELERY_TASK_ROUTES = {
     "reports.deliver_report": {"queue": "messaging"},
     "payments.process_webhook_event": {"queue": "webhooks"},
     "conversations.*": {"queue": "webhooks"},
+    "followups.*": {"queue": "reminders"},
     "messaging.*": {"queue": "webhooks"},
     "payments.*": {"queue": "payments"},
 }
+# Times are IST (CELERY_TIMEZONE). See ARCHITECTURE §11.
 CELERY_BEAT_SCHEDULE: dict = {
+    "dispatch-due-reminders": {"task": "followups.dispatch_due_reminders", "schedule": 60},
+    "escalate-overdue-followups": {"task": "followups.escalate_overdue", "schedule": crontab(minute=5)},
     # Catch payments whose webhook never arrived (ARCHITECTURE §6.1 step 5).
     "reconcile-payment-links": {"task": "payments.reconcile_payment_links", "schedule": 10 * 60},
     # Reprocess webhook events that failed (e.g. DB briefly unavailable).
     "retry-failed-webhooks": {"task": "payments.retry_failed_webhook_events", "schedule": 5 * 60},
+    "expire-stale-requests": {"task": "reports.expire_stale_requests", "schedule": 15 * 60},
+    "purge-expired-documents": {
+        "task": "reports.purge_expired_documents",
+        "schedule": crontab(hour=2, minute=30),
+    },
 }
 
 # --- Logging (JSON in prod, PII-scrubbed everywhere) ---

@@ -509,9 +509,22 @@ The UI hides actions the role can't perform, but **the API is the enforcement po
 | `expire_stale_requests` | 15 min | time out OTP/idle requests, release `active_lock` |
 | `retry_failed_webhook_events` | 5 min | reprocess `WebhookEvent`s in error |
 | `purge_expired_documents` | daily | PDF retention |
-| `build_daily_aggregates` | daily 00:30 IST | analytics tables |
+| ~~`build_daily_aggregates`~~ | — | not built: live queries suffice (see Phase 8 notes) |
 
 Timezone: store UTC, display `Asia/Kolkata`.
+
+**Phase 8 notes (as built):**
+- Reminder dispatch claims due rows with `SELECT … FOR UPDATE SKIP LOCKED` and marks them `QUEUED` before any
+  send, so overlapping beats or several workers cannot double-send; `QUEUED` rows untouched for 15 min are
+  re-claimed (the send itself is idempotent). Each send re-checks: follow-up open, not paid, not opted out,
+  report still payable. An expiring link is replaced before it is sent.
+- Escalation: unpaid ≥ `FOLLOWUP_ESCALATE_AFTER_HOURS` and no note for `FOLLOWUP_ESCALATE_QUIET_HOURS` →
+  `ESCALATED`, level +1 (max `FOLLOWUP_MAX_ESCALATION`), priority HIGH, audited.
+- `expire_stale_requests` (15 min): abandoned DRAFT/CONSENTED/OTP_SENT (no customer activity for
+  `STALE_REQUEST_MINUTES`) → EXPIRED and conversation reset with a notice; GENERATED past `expires_at` unpaid →
+  EXPIRED, links cancelled, follow-up CLOSED_LOST; OTP_VERIFIED/FETCHING stuck for 10 min → fetch re-queued
+  (safe: fetch is exactly-once).
+- `purge_expired_documents` (daily 02:30): deletes the file, keeps metadata, audited.
 
 ---
 

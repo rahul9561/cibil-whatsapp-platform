@@ -80,10 +80,16 @@ inspected before any change, and nothing is overwritten without confirmation.
   (`payment_link_v1`, `payment_reminder_v1`, `report_delivery_v1` with a document header) for approval,
   and run one real conversation. Re-check the Graph API version and error codes at the same time.
 
-## Phase 8 — Celery reminders, escalation & scheduled jobs
+## Phase 8 — Celery reminders, escalation & scheduled jobs ✅
 - Beat schedule per §11; reminder dispatch with `skip_locked`; escalation; auto-close on payment;
   stale-request expiry; PDF purge; daily aggregates.
 - **Exit:** tests with `freezegun` for cadence, no double send, stop conditions.
+- Done: `apps/followups/tasks.py` (dispatch, send, escalate) and `apps/reports/maintenance.py` (expiry,
+  stuck-fetch restart, PDF purge); schedule in `CELERY_BEAT_SCHEDULE` (IST).
+- Deliberately not built: `build_daily_aggregates`. Dashboard and revenue queries run live and are fast at the
+  expected volume; add aggregate tables only if those endpoints become slow.
+- Not built yet: in-app/e-mail notification to assignees on escalation (escalations show on the dashboard and
+  in the follow-up queue with priority HIGH).
 
 ## Phase 9 — React admin dashboard
 - Vite + Tailwind scaffold, auth/2FA, layout, role-aware navigation.

@@ -81,3 +81,11 @@ BTN_DECLINE = ("decline", "No, thanks")
 BTN_RESEND = ("resend", "Resend OTP")
 BTN_RETRY = ("retry", "Try again")
 BTN_USE_SAVED = ("confirm", "Use these details")
+
+REQUEST_TIMED_OUT = (
+    "Your request timed out because we didn't hear back. Send HI whenever you'd like to start again."
+)
+REPORT_EXPIRED = (
+    "Your report {ref} has expired because it wasn't paid for in time. You have not been charged. "
+    "Send HI if you'd like a fresh report."
+)

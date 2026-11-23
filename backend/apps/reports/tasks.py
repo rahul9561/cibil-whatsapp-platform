@@ -57,3 +57,7 @@ def deliver_report_task(self, request_id: str):
 
         report_delivered(request_id)
     return str(msg.pk) if msg else None
+
+
+# Celery only auto-discovers `tasks` modules: register the scheduled maintenance jobs from here.
+from .maintenance import expire_stale_requests, purge_expired_documents  # noqa: E402, F401

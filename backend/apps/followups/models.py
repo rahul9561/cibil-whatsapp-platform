@@ -123,6 +123,7 @@ class ReminderKind(models.TextChoices):
 
 class ReminderStatus(models.TextChoices):
     SCHEDULED = "scheduled", "Scheduled"
+    QUEUED = "queued", "Queued for sending"
     SENT = "sent", "Sent"
     SKIPPED = "skipped", "Skipped"
     FAILED = "failed", "Failed"
