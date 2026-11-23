@@ -24,8 +24,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
     "apps.core",
     "apps.accounts",
+    "apps.audit",
 ]
 
 MIDDLEWARE = [
@@ -35,6 +38,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -80,6 +84,16 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+OTP_TOTP_ISSUER = env("OTP_TOTP_ISSUER", default="CIBIL Admin")
+LOGIN_LOCKOUT_THRESHOLD = env.int("LOGIN_LOCKOUT_THRESHOLD", default=5)
+LOGIN_LOCKOUT_SECONDS = env.int("LOGIN_LOCKOUT_SECONDS", default=15 * 60)
+# Number of reverse proxies in front of Django whose X-Forwarded-For entry is trusted (nginx = 1).
+TRUSTED_PROXY_COUNT = env.int("TRUSTED_PROXY_COUNT", default=0)
+
+# --- Encryption (ARCHITECTURE §6.4). Keys only ever come from the environment. ---
+FIELD_ENCRYPTION_KEYS = env.list("FIELD_ENCRYPTION_KEYS")  # newest first
+BLIND_INDEX_KEY = env("BLIND_INDEX_KEY")
+
 # --- Sessions / cookies (SPA uses session auth + CSRF, see ARCHITECTURE §6.6) ---
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
@@ -102,14 +116,23 @@ PRIVATE_STORAGE_ROOT = Path(env("PRIVATE_STORAGE_ROOT", default=str(REPO_ROOT / 
 # --- DRF ---
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_PERMISSION_CLASSES": ["apps.accounts.permissions.IsFullyAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "otp": "10/min"},
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
 }
 
 # --- Redis / Celery ---
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+# Shared cache: login lockout counters and DRF throttles must be shared across all web workers.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "KEY_PREFIX": "cibil",
+    }
+}
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/1")
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/2")
 CELERY_TIMEZONE = TIME_ZONE

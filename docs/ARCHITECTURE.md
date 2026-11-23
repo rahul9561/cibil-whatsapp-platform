@@ -310,7 +310,8 @@ Events handled: `payment_link.paid`, `payment_link.expired`, `payment_link.cance
 ### 6.6 Authentication & roles
 - Django session auth + CSRF for the SPA (same origin behind Nginx), secure/HttpOnly/SameSite=Lax cookies.
   Rationale: avoids storing tokens in the browser.
-- TOTP 2FA (`django-otp`) mandatory for Admin and Super Admin, optional for others.
+- TOTP 2FA (`django-otp`) mandatory for Super Admin, Admin and Finance (refund approval), optional for
+  others — but once a user enrols, every login must pass it.
 - Login rate limiting, lockout, password validators, session timeout.
 
 | Permission | Super Admin | Admin | Follow-up Agent | Finance | Auditor (read-only) |
@@ -330,7 +331,11 @@ Events handled: `payment_link.paid`, `payment_link.expired`, `payment_link.cance
 | Audit logs | ✓ | – | – | – | ✓ |
 | Settings (price, templates, flags) | ✓ | – | – | – | – |
 
-Implemented as DRF permission classes + object-level checks; roles map to Django groups so they are editable.
+Implemented as a `role` field on `User` and a role → capability matrix in code
+(`apps/accounts/capabilities.py`), enforced by DRF permission classes (`require("refund.approve")`) plus
+object-level checks. **[Decision, Phase 2]** A code matrix instead of editable Django groups: permission
+changes go through code review and the audit trail, and tests pin the rules (e.g. auditors are read-only,
+admins cannot approve refunds).
 
 ### 6.7 Retry & failure handling
 - Adapters raise typed errors: `TransientError` (timeouts, 5xx, 429) vs `PermanentError` (4xx validation,

@@ -19,10 +19,12 @@ inspected before any change, and nothing is overwritten without confirmation.
 - Celery app wiring, health endpoints, structured logging with PII filter.
 - **Exit:** `docker compose up` boots; `pytest` runs a smoke test; `/healthz` returns 200.
 
-## Phase 2 — Core: security primitives, users, audit
-- `core`: `EncryptedTextField` (MultiFernet), blind-index helper, key-rotation command, base model (UUID, timestamps).
-- `accounts`: custom `User`, roles/groups, permission classes, TOTP 2FA, login throttling.
-- `audit`: append-only `AuditLog` with hash chain, request-id middleware.
+## Phase 2 — Core: security primitives, users, audit ✅
+- `core`: `EncryptedTextField` (MultiFernet), blind-index helper, key-rotation command, base model (UUID, timestamps),
+  startup checks on keys, shared redaction rules.
+- `accounts`: roles + capability matrix, permission classes, TOTP 2FA, session auth API
+  (`/api/v1/auth/{csrf,login,logout,me,2fa/setup,2fa/confirm,2fa/verify}`), per-IP throttle + per-account lockout.
+- `audit`: append-only `AuditLog` with hash chain, `verify_audit_chain` command, request-id middleware.
 - **Exit:** tests for encryption round-trip/rotation, blind index lookup, audit immutability, role checks.
 
 ## Phase 3 — Domain models & migrations

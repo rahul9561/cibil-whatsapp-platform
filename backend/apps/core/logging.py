@@ -6,43 +6,12 @@ PII or OTPs to a logger. See ARCHITECTURE §6.5 / §6.9.
 
 import json
 import logging
-import re
 from datetime import UTC, datetime
 
 from .middleware import request_id_var
+from .redaction import REDACTED, is_sensitive_key, scrub
 
-REDACTED = "[REDACTED]"
-
-# Keys in `extra={...}` whose values are always dropped.
-SENSITIVE_KEYS = frozenset(
-    {
-        "otp",
-        "password",
-        "pan",
-        "dob",
-        "date_of_birth",
-        "aadhaar",
-        "token",
-        "access_token",
-        "secret",
-        "api_key",
-        "authorization",
-        "signature",
-        "phone",
-        "mobile",
-        "email",
-        "wa_id",
-        "body",
-    }
-)
-
-_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\b[A-Z]{5}[0-9]{4}[A-Z]\b"), "[PAN]"),
-    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"), "[EMAIL]"),
-    # Phone before Aadhaar: "91" + 10-digit mobile is also 12 digits.
-    (re.compile(r"(?<!\d)(?:\+?91[ -]?)?[6-9]\d{9}(?!\d)"), "[PHONE]"),
-    (re.compile(r"(?<!\d)\d{4}[ -]?\d{4}[ -]?\d{4}(?!\d)"), "[AADHAAR]"),
-]
+__all__ = ["REDACTED", "JSONFormatter", "PIIScrubFilter", "RequestIDFilter", "scrub"]
 
 # Attributes every LogRecord has; anything else came from `extra=`.
 _STANDARD_ATTRS = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {
@@ -50,12 +19,6 @@ _STANDARD_ATTRS = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None)
     "asctime",
     "request_id",
 }
-
-
-def scrub(text: str) -> str:
-    for pattern, replacement in _PATTERNS:
-        text = pattern.sub(replacement, text)
-    return text
 
 
 def _extra_keys(record: logging.LogRecord) -> list[str]:
@@ -86,7 +49,7 @@ class PIIScrubFilter(logging.Filter):
 
         for key in _extra_keys(record):
             value = getattr(record, key)
-            if key.lower() in SENSITIVE_KEYS:
+            if is_sensitive_key(key):
                 setattr(record, key, REDACTED)
             elif isinstance(value, str):
                 setattr(record, key, scrub(value))
