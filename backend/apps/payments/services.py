@@ -212,3 +212,104 @@ class PaymentService:
                     changes={"report_request": link.report_request.public_ref},
                 )
         return link
+
+
+# -- refunds (request -> four-eyes approval -> gateway) ------------------------------------------------
+
+
+class RefundNotAllowed(PermanentError):
+    def __init__(self, reason: str):
+        super().__init__(f"refund not allowed: {reason}", code=f"refund_{reason}")
+
+
+IN_FLIGHT_REFUNDS = ("requested", "approved", "processing")
+
+
+class RefundService:
+    def __init__(self, gateway=None):
+        self.gw = gateway or get_payment_gateway()
+
+    def request(self, payment_id, *, amount_paise: int, reason: str, by_user):
+        from .models import Refund
+
+        with transaction.atomic():
+            payment = Payment.objects.select_for_update().get(pk=payment_id)
+            if payment.status not in {PaymentStatus.CAPTURED, PaymentStatus.PARTIALLY_REFUNDED}:
+                raise RefundNotAllowed("payment_not_captured")
+            pending = sum(
+                payment.refunds.filter(status__in=IN_FLIGHT_REFUNDS).values_list("amount_paise", flat=True)
+            )
+            if amount_paise <= 0 or amount_paise > payment.refundable_paise - pending:
+                raise RefundNotAllowed("amount_exceeds_refundable")
+            refund = Refund.objects.create(
+                payment=payment, amount_paise=amount_paise, reason=reason, requested_by=by_user
+            )
+            audit.record(
+                "refund.requested",
+                actor=by_user,
+                obj=refund,
+                changes={"amount_paise": amount_paise, "payment": payment.razorpay_payment_id},
+            )
+        return refund
+
+    def decide(self, refund_id, *, approve: bool, by_user, note: str = ""):
+        from .models import Refund, RefundStatus
+
+        with transaction.atomic():
+            refund = Refund.objects.select_for_update().get(pk=refund_id)
+            if refund.status != RefundStatus.REQUESTED:
+                raise RefundNotAllowed("already_decided")
+            if refund.requested_by_id == by_user.pk:
+                raise RefundNotAllowed("self_approval")  # also enforced by a DB constraint
+            refund.status = RefundStatus.APPROVED if approve else RefundStatus.REJECTED
+            refund.approved_by, refund.decided_at = by_user, timezone.now()
+            if not approve:
+                refund.failure_reason = note[:255]
+            refund.save()
+            audit.record(
+                "refund.approved" if approve else "refund.rejected",
+                actor=by_user,
+                obj=refund,
+                changes={"note": note},
+            )
+        return refund
+
+    def process(self, refund_id):
+        """APPROVED -> PROCESSING -> PROCESSED at the gateway (idempotent per refund)."""
+        from .models import Refund, RefundStatus
+
+        with transaction.atomic():
+            refund = Refund.objects.select_for_update().select_related("payment").get(pk=refund_id)
+            if refund.status != RefundStatus.APPROVED:
+                return refund
+            refund.status = RefundStatus.PROCESSING
+            refund.save(update_fields=["status", "updated_at"])
+        try:
+            result = self.gw.create_refund(
+                refund.payment.razorpay_payment_id, refund.amount_paise, reference=str(refund.pk)
+            )
+        except PermanentError as exc:
+            Refund.objects.filter(pk=refund.pk).update(status=RefundStatus.FAILED, failure_reason=exc.code)
+            audit.record("refund.failed", actor_type=ActorType.SYSTEM, obj=refund, changes={"code": exc.code})
+            raise
+        with transaction.atomic():
+            refund = Refund.objects.select_for_update().get(pk=refund.pk)
+            payment = Payment.objects.select_for_update().get(pk=refund.payment_id)
+            refund.razorpay_refund_id = result.refund_id
+            if result.status == "processed":
+                refund.status, refund.processed_at = RefundStatus.PROCESSED, timezone.now()
+                payment.amount_refunded_paise += refund.amount_paise
+                payment.status = (
+                    PaymentStatus.REFUNDED
+                    if payment.amount_refunded_paise >= payment.amount_paise
+                    else PaymentStatus.PARTIALLY_REFUNDED
+                )
+                payment.save(update_fields=["amount_refunded_paise", "status", "updated_at"])
+            refund.save()
+            audit.record(
+                "refund.processed" if result.status == "processed" else "refund.submitted",
+                actor_type=ActorType.SYSTEM,
+                obj=refund,
+                changes={"gateway_status": result.status},
+            )
+        return refund

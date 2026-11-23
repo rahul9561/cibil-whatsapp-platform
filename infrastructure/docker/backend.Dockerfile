@@ -8,7 +8,8 @@ RUN apt-get update \
 WORKDIR /build
 COPY requirements/ requirements/
 ARG REQUIREMENTS=prod
-RUN pip wheel --wheel-dir /wheels -r requirements/${REQUIREMENTS}.txt
+# Generous timeout/retries: slow or flaky connections to PyPI should not fail the build.
+RUN pip wheel --timeout 120 --retries 10 --wheel-dir /wheels -r requirements/${REQUIREMENTS}.txt
 
 
 FROM python:3.11-slim-bookworm AS runtime

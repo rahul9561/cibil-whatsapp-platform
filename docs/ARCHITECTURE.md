@@ -410,6 +410,18 @@ All under `/api/v1/`, JSON, paginated, filterable (`django-filter`), OpenAPI via
 
 ---
 
+**Phase 5 notes (as built):** the full contract is `docs/openapi.yaml` (regenerate with
+`manage.py spectacular --file ../docs/openapi.yaml`). Differences from the outline above:
+- Refunds: `POST payments/{id}/refunds` → `POST refunds/{id}/approve|reject`; approval queues
+  `payments.process_refund`. A request cannot exceed the refundable amount minus refunds already in flight.
+- Follow-ups: `GET/POST follow-ups/{id}/notes`, `GET/POST follow-ups/{id}/reminders`, `DELETE reminders/{id}`
+  (cancels, never deletes). Filters: `status`, `open`, `assignee=me|unassigned|<id>`, `overdue`, `priority`.
+- Report requests: `?unpaid=true` lists generated-but-unpaid; `payment_status` is derived, not stored.
+- Agents are scoped to records whose follow-up is assigned to them (other records return 404).
+- `GET audit-logs/verify` checks the hash chain; `GET analytics/revenue?export=csv` downloads CSV.
+- `GET settings` is read-only (PATCH needs a DB-backed settings model — deferred).
+- Domain errors map to HTTP: invalid state → 409, external/business rule failure → 422 with a `code`.
+
 ## 9. Integration adapters
 
 ```python

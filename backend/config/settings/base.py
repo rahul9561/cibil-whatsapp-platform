@@ -24,6 +24,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "django_filters",
+    "drf_spectacular",
     "django_otp",
     "django_otp.plugins.otp_totp",
     "apps.core",
@@ -153,6 +155,12 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["apps.accounts.permissions.IsFullyAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_THROTTLE_RATES": {"login": "10/min", "otp": "10/min"},
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "apps.core.api.exception_handler",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
 }
@@ -216,5 +224,23 @@ LOGGING = {
         "django.db.backends": {"level": "WARNING"},
         # Never log request bodies (webhooks carry PII/OTPs).
         "django.request": {"level": "WARNING"},
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "CIBIL WhatsApp Platform - Admin API",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SERVE_PERMISSIONS": ["apps.accounts.permissions.IsFullyAuthenticated"],
+    "COMPONENT_SPLIT_REQUEST": True,
+    "ENUM_NAME_OVERRIDES": {
+        "ReportStatusEnum": "apps.reports.models.ReportStatus",
+        "DeliveryStatusEnum": "apps.reports.models.DeliveryStatus",
+        "PaymentLinkStatusEnum": "apps.payments.models.PaymentLinkStatus",
+        "PaymentStatusEnum": "apps.payments.models.PaymentStatus",
+        "RefundStatusEnum": "apps.payments.models.RefundStatus",
+        "FollowUpStatusEnum": "apps.followups.models.FollowUpStatus",
+        "ReminderStatusEnum": "apps.followups.models.ReminderStatus",
+        "MessageStatusEnum": "apps.messaging.models.MessageStatus",
     },
 }

@@ -7,6 +7,6 @@ admin.site.__class__ = OTPAdminSite
 
 urlpatterns = [
     path("", include("apps.core.urls")),
-    path("api/v1/auth/", include("apps.accounts.urls")),
+    path("api/v1/", include("config.api_urls")),
     path("django-admin/", admin.site.urls),
 ]

@@ -1,0 +1,3394 @@
+openapi: 3.0.3
+info:
+  title: CIBIL WhatsApp Platform - Admin API
+  version: 1.0.0
+paths:
+  /api/v1/analytics/funnel:
+    get:
+      operationId: analytics_funnel_retrieve
+      parameters:
+      - in: query
+        name: from
+        schema:
+          type: string
+      - in: query
+        name: to
+        schema:
+          type: string
+      tags:
+      - analytics
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/analytics/revenue:
+    get:
+      operationId: analytics_revenue_list
+      parameters:
+      - in: query
+        name: export
+        schema:
+          type: string
+          enum:
+          - csv
+      - in: query
+        name: from
+        schema:
+          type: string
+      - in: query
+        name: granularity
+        schema:
+          type: string
+          enum:
+          - day
+          - month
+          - week
+      - in: query
+        name: to
+        schema:
+          type: string
+      tags:
+      - analytics
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RevenueRow'
+          description: ''
+  /api/v1/audit-logs:
+    get:
+      operationId: audit_logs_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: action
+        schema:
+          type: string
+      - in: query
+        name: actor
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: actor_type
+        schema:
+          type: string
+          enum:
+          - anonymous
+          - customer
+          - system
+          - user
+          - webhook
+        description: |-
+          * `user` - User
+          * `system` - System
+          * `webhook` - Webhook
+          * `customer` - Customer
+          * `anonymous` - Anonymous
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: object_id
+        schema:
+          type: string
+      - in: query
+        name: object_type
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: request_id
+        schema:
+          type: string
+      tags:
+      - audit-logs
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLogList'
+          description: ''
+  /api/v1/audit-logs/{id}:
+    get:
+      operationId: audit_logs_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this audit log.
+        required: true
+      tags:
+      - audit-logs
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLog'
+          description: ''
+  /api/v1/audit-logs/verify:
+    get:
+      operationId: audit_logs_verify_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      tags:
+      - audit-logs
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/auth/2fa/confirm:
+    post:
+      operationId: auth_2fa_confirm_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/auth/2fa/setup:
+    post:
+      operationId: auth_2fa_setup_create
+      description: |-
+        Start TOTP enrolment. Only possible while the user has no confirmed device;
+        resetting an existing device is an admin action (Phase 5).
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/auth/2fa/verify:
+    post:
+      operationId: auth_2fa_verify_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/auth/csrf:
+    get:
+      operationId: auth_csrf_retrieve
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/auth/login:
+    post:
+      operationId: auth_login_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/auth/logout:
+    post:
+      operationId: auth_logout_create
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/auth/me:
+    get:
+      operationId: auth_me_retrieve
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/customers:
+    get:
+      operationId: customers_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: opted_out
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: pan
+        schema:
+          type: string
+        description: Exact PAN
+      - in: query
+        name: phone
+        schema:
+          type: string
+        description: Exact phone number
+      tags:
+      - customers
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCustomerList'
+          description: ''
+  /api/v1/customers/{id}:
+    get:
+      operationId: customers_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this customer.
+        required: true
+      tags:
+      - customers
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+          description: ''
+  /api/v1/customers/{id}/messages:
+    post:
+      operationId: customers_messages_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this customer.
+        required: true
+      tags:
+      - customers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualMessageRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManualMessageRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManualMessageRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/customers/{id}/reveal:
+    post:
+      operationId: customers_reveal_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this customer.
+        required: true
+      tags:
+      - customers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevealRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RevealRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RevealRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/customers/{id}/timeline:
+    get:
+      operationId: customers_timeline_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this customer.
+        required: true
+      tags:
+      - customers
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/dashboard/summary:
+    get:
+      operationId: dashboard_summary_retrieve
+      tags:
+      - dashboard
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/follow-ups:
+    get:
+      operationId: follow_ups_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: assignee
+        schema:
+          type: string
+        description: User id, "me" or "unassigned"
+      - in: query
+        name: open
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: overdue
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: priority
+        schema:
+          type: array
+          items:
+            type: integer
+            enum:
+            - 1
+            - 2
+            - 3
+        description: |-
+          * `1` - Low
+          * `2` - Normal
+          * `3` - High
+        explode: true
+        style: form
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - closed_lost
+            - closed_manual
+            - closed_paid
+            - escalated
+            - in_progress
+            - open
+        description: |-
+          * `open` - Open
+          * `in_progress` - In progress
+          * `escalated` - Escalated
+          * `closed_paid` - Closed — paid
+          * `closed_lost` - Closed — lost
+          * `closed_manual` - Closed — manually
+        explode: true
+        style: form
+      tags:
+      - follow-ups
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFollowUpList'
+          description: ''
+  /api/v1/follow-ups/{id}:
+    get:
+      operationId: follow_ups_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this follow up.
+        required: true
+      tags:
+      - follow-ups
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowUp'
+          description: ''
+    patch:
+      operationId: follow_ups_partial_update
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this follow up.
+        required: true
+      tags:
+      - follow-ups
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedFollowUpRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedFollowUpRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedFollowUpRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowUp'
+          description: ''
+  /api/v1/follow-ups/{id}/notes:
+    get:
+      operationId: follow_ups_notes_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: assignee
+        schema:
+          type: string
+        description: User id, "me" or "unassigned"
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this follow up.
+        required: true
+      - in: query
+        name: open
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: overdue
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: priority
+        schema:
+          type: array
+          items:
+            type: integer
+            enum:
+            - 1
+            - 2
+            - 3
+        description: |-
+          * `1` - Low
+          * `2` - Normal
+          * `3` - High
+        explode: true
+        style: form
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - closed_lost
+            - closed_manual
+            - closed_paid
+            - escalated
+            - in_progress
+            - open
+        description: |-
+          * `open` - Open
+          * `in_progress` - In progress
+          * `escalated` - Escalated
+          * `closed_paid` - Closed — paid
+          * `closed_lost` - Closed — lost
+          * `closed_manual` - Closed — manually
+        explode: true
+        style: form
+      tags:
+      - follow-ups
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNoteList'
+          description: ''
+    post:
+      operationId: follow_ups_notes_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: assignee
+        schema:
+          type: string
+        description: User id, "me" or "unassigned"
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this follow up.
+        required: true
+      - in: query
+        name: open
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: overdue
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: priority
+        schema:
+          type: array
+          items:
+            type: integer
+            enum:
+            - 1
+            - 2
+            - 3
+        description: |-
+          * `1` - Low
+          * `2` - Normal
+          * `3` - High
+        explode: true
+        style: form
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - closed_lost
+            - closed_manual
+            - closed_paid
+            - escalated
+            - in_progress
+            - open
+        description: |-
+          * `open` - Open
+          * `in_progress` - In progress
+          * `escalated` - Escalated
+          * `closed_paid` - Closed — paid
+          * `closed_lost` - Closed — lost
+          * `closed_manual` - Closed — manually
+        explode: true
+        style: form
+      tags:
+      - follow-ups
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNoteList'
+          description: ''
+  /api/v1/follow-ups/{id}/reminders:
+    get:
+      operationId: follow_ups_reminders_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: assignee
+        schema:
+          type: string
+        description: User id, "me" or "unassigned"
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this follow up.
+        required: true
+      - in: query
+        name: open
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: overdue
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: priority
+        schema:
+          type: array
+          items:
+            type: integer
+            enum:
+            - 1
+            - 2
+            - 3
+        description: |-
+          * `1` - Low
+          * `2` - Normal
+          * `3` - High
+        explode: true
+        style: form
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - closed_lost
+            - closed_manual
+            - closed_paid
+            - escalated
+            - in_progress
+            - open
+        description: |-
+          * `open` - Open
+          * `in_progress` - In progress
+          * `escalated` - Escalated
+          * `closed_paid` - Closed — paid
+          * `closed_lost` - Closed — lost
+          * `closed_manual` - Closed — manually
+        explode: true
+        style: form
+      tags:
+      - follow-ups
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReminderList'
+          description: ''
+    post:
+      operationId: follow_ups_reminders_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: assignee
+        schema:
+          type: string
+        description: User id, "me" or "unassigned"
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this follow up.
+        required: true
+      - in: query
+        name: open
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: overdue
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: priority
+        schema:
+          type: array
+          items:
+            type: integer
+            enum:
+            - 1
+            - 2
+            - 3
+        description: |-
+          * `1` - Low
+          * `2` - Normal
+          * `3` - High
+        explode: true
+        style: form
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - closed_lost
+            - closed_manual
+            - closed_paid
+            - escalated
+            - in_progress
+            - open
+        description: |-
+          * `open` - Open
+          * `in_progress` - In progress
+          * `escalated` - Escalated
+          * `closed_paid` - Closed — paid
+          * `closed_lost` - Closed — lost
+          * `closed_manual` - Closed — manually
+        explode: true
+        style: form
+      tags:
+      - follow-ups
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReminderRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReminderRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReminderRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReminderList'
+          description: ''
+  /api/v1/messages:
+    get:
+      operationId: messages_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: customer
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: direction
+        schema:
+          type: string
+          enum:
+          - in
+          - out
+        description: |-
+          * `in` - Inbound
+          * `out` - Outbound
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: related_report_request
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - delivered
+            - failed
+            - queued
+            - read
+            - received
+            - sent
+        description: |-
+          * `received` - Received
+          * `queued` - Queued
+          * `sent` - Sent
+          * `delivered` - Delivered
+          * `read` - Read
+          * `failed` - Failed
+        explode: true
+        style: form
+      - in: query
+        name: template_name
+        schema:
+          type: string
+      - in: query
+        name: type
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - document
+            - image
+            - interactive
+            - other
+            - template
+            - text
+        description: |-
+          * `text` - Text
+          * `template` - Template
+          * `interactive` - Interactive
+          * `document` - Document
+          * `image` - Image
+          * `other` - Other
+        explode: true
+        style: form
+      tags:
+      - messages
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMessageLogList'
+          description: ''
+  /api/v1/messages/{id}:
+    get:
+      operationId: messages_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this message log.
+        required: true
+      tags:
+      - messages
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageLog'
+          description: ''
+  /api/v1/payment-links:
+    get:
+      operationId: payment_links_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: report_request
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - active
+            - cancelled
+            - expired
+            - failed
+            - paid
+            - pending
+        description: |-
+          * `pending` - Pending (not yet created at Razorpay)
+          * `active` - Active
+          * `paid` - Paid
+          * `expired` - Expired
+          * `cancelled` - Cancelled
+          * `failed` - Creation failed
+        explode: true
+        style: form
+      tags:
+      - payment-links
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPaymentLinkList'
+          description: ''
+  /api/v1/payment-links/{id}:
+    get:
+      operationId: payment_links_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this payment link.
+        required: true
+      tags:
+      - payment-links
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentLink'
+          description: ''
+  /api/v1/payments:
+    get:
+      operationId: payments_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: razorpay_payment_id
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - authorized
+            - captured
+            - failed
+            - partially_refunded
+            - refunded
+        description: |-
+          * `authorized` - Authorized
+          * `captured` - Captured
+          * `failed` - Failed
+          * `partially_refunded` - Partially refunded
+          * `refunded` - Refunded
+        explode: true
+        style: form
+      tags:
+      - payments
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPaymentList'
+          description: ''
+  /api/v1/payments/{id}:
+    get:
+      operationId: payments_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this payment.
+        required: true
+      tags:
+      - payments
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+          description: ''
+  /api/v1/payments/{id}/refunds:
+    post:
+      operationId: payments_refunds_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this payment.
+        required: true
+      tags:
+      - payments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RefundRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RefundRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+          description: ''
+  /api/v1/refunds:
+    get:
+      operationId: refunds_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: payment
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - approved
+            - failed
+            - processed
+            - processing
+            - rejected
+            - requested
+        description: |-
+          * `requested` - Requested
+          * `approved` - Approved
+          * `rejected` - Rejected
+          * `processing` - Processing at Razorpay
+          * `processed` - Processed
+          * `failed` - Failed
+        explode: true
+        style: form
+      tags:
+      - refunds
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRefundList'
+          description: ''
+  /api/v1/refunds/{id}:
+    get:
+      operationId: refunds_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this refund.
+        required: true
+      tags:
+      - refunds
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+          description: ''
+  /api/v1/refunds/{id}/approve:
+    post:
+      operationId: refunds_approve_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this refund.
+        required: true
+      tags:
+      - refunds
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+          description: ''
+  /api/v1/refunds/{id}/reject:
+    post:
+      operationId: refunds_reject_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this refund.
+        required: true
+      tags:
+      - refunds
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+          description: ''
+  /api/v1/reminders/{id}:
+    delete:
+      operationId: reminders_destroy
+      description: DELETE cancels a scheduled reminder (it is kept for history, never
+        removed).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this reminder.
+        required: true
+      tags:
+      - reminders
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/report-requests:
+    get:
+      operationId: report_requests_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: customer
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: delivery_status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - delivered
+            - failed
+            - not_delivered
+            - queued
+            - read
+            - sent
+        description: |-
+          * `not_delivered` - Not delivered
+          * `queued` - Queued
+          * `sent` - Sent
+          * `delivered` - Delivered
+          * `read` - Read
+          * `failed` - Failed
+        explode: true
+        style: form
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: public_ref
+        schema:
+          type: string
+      - in: query
+        name: report_status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - cancelled
+            - consented
+            - draft
+            - expired
+            - failed
+            - fetching
+            - generated
+            - no_hit
+            - otp_sent
+            - otp_verified
+        description: |-
+          * `draft` - Collecting details
+          * `consented` - Consent given
+          * `otp_sent` - OTP sent
+          * `otp_verified` - OTP verified
+          * `fetching` - Fetching report
+          * `generated` - Report generated
+          * `failed` - Failed
+          * `no_hit` - No credit history
+          * `expired` - Expired
+          * `cancelled` - Cancelled
+        explode: true
+        style: form
+      - in: query
+        name: unpaid
+        schema:
+          type: boolean
+        description: Generated but not paid
+      tags:
+      - report-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReportRequestList'
+          description: ''
+  /api/v1/report-requests/{id}:
+    get:
+      operationId: report_requests_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this report request.
+        required: true
+      tags:
+      - report-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRequestDetail'
+          description: ''
+  /api/v1/report-requests/{id}/cancel:
+    post:
+      operationId: report_requests_cancel_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this report request.
+        required: true
+      tags:
+      - report-requests
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRequest'
+          description: ''
+  /api/v1/report-requests/{id}/document:
+    get:
+      operationId: report_requests_document_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this report request.
+        required: true
+      tags:
+      - report-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Report PDF
+  /api/v1/report-requests/{id}/payment-links/resend:
+    post:
+      operationId: report_requests_payment_links_resend_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this report request.
+        required: true
+      tags:
+      - report-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentLinkBrief'
+          description: ''
+  /api/v1/report-requests/{id}/retry:
+    post:
+      operationId: report_requests_retry_create
+      description: 'Re-run the stuck step: fetch (OTP verified / fetching) or delivery
+        (paid, not delivered).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this report request.
+        required: true
+      tags:
+      - report-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/settings:
+    get:
+      operationId: settings_retrieve
+      description: Read-only business configuration. Editing at runtime needs a DB-backed
+        settings model (later phase).
+      tags:
+      - settings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/users:
+    get:
+      operationId: users_list
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - admin
+          - agent
+          - auditor
+          - finance
+          - super_admin
+        description: |-
+          * `super_admin` - Super Admin
+          * `admin` - Admin
+          * `agent` - Follow-up Agent
+          * `finance` - Finance
+          * `auditor` - Auditor (read-only)
+      tags:
+      - users
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStaffList'
+          description: ''
+    post:
+      operationId: users_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/StaffCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StaffCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+          description: ''
+  /api/v1/users/{id}:
+    get:
+      operationId: users_retrieve
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user.
+        required: true
+      tags:
+      - users
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+          description: ''
+    patch:
+      operationId: users_partial_update
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+          description: ''
+  /api/v1/users/{id}/reset-2fa:
+    post:
+      operationId: users_reset_2fa_create
+      description: 'Per-action capability, e.g. `capabilities = {"list": "report.view",
+        "*": "report.manage"}`.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user.
+        required: true
+      tags:
+      - users
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+          description: ''
+components:
+  schemas:
+    ActorTypeEnum:
+      enum:
+      - user
+      - system
+      - webhook
+      - customer
+      - anonymous
+      type: string
+      description: |-
+        * `user` - User
+        * `system` - System
+        * `webhook` - Webhook
+        * `customer` - Customer
+        * `anonymous` - Anonymous
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        actor:
+          type: string
+          format: uuid
+          nullable: true
+        actor_label:
+          type: string
+          maxLength: 254
+        actor_type:
+          $ref: '#/components/schemas/ActorTypeEnum'
+        action:
+          type: string
+          maxLength: 100
+        object_type:
+          type: string
+          maxLength: 100
+        object_id:
+          type: string
+          maxLength: 64
+        changes: {}
+        ip:
+          type: string
+          nullable: true
+        user_agent:
+          type: string
+          maxLength: 255
+        request_id:
+          type: string
+          maxLength: 64
+      required:
+      - action
+      - actor_type
+      - created_at
+      - id
+    BlankEnum:
+      enum:
+      - ''
+    CancelRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - reason
+    ChannelEnum:
+      enum:
+      - call
+      - whatsapp
+      - other
+      type: string
+      description: |-
+        * `call` - Phone call
+        * `whatsapp` - WhatsApp
+        * `other` - Other
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        phone:
+          type: string
+        name:
+          type: string
+        pan:
+          type: string
+        email:
+          type: string
+          readOnly: true
+        gender:
+          oneOf:
+          - $ref: '#/components/schemas/GenderEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        opted_out_at:
+          type: string
+          format: date-time
+          nullable: true
+        open_request:
+          type: string
+          nullable: true
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - id
+      - name
+      - open_request
+      - pan
+      - phone
+    DecisionRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          default: ''
+          maxLength: 255
+    DeliveryStatusEnum:
+      enum:
+      - not_delivered
+      - queued
+      - sent
+      - delivered
+      - read
+      - failed
+      type: string
+      description: |-
+        * `not_delivered` - Not delivered
+        * `queued` - Queued
+        * `sent` - Sent
+        * `delivered` - Delivered
+        * `read` - Read
+        * `failed` - Failed
+    DirectionEnum:
+      enum:
+      - in
+      - out
+      type: string
+      description: |-
+        * `in` - Inbound
+        * `out` - Outbound
+    FieldsEnum:
+      enum:
+      - dob
+      - email
+      - full_name
+      - pan
+      - phone
+      - pincode
+      type: string
+      description: |-
+        * `dob` - dob
+        * `email` - email
+        * `full_name` - full_name
+        * `pan` - pan
+        * `phone` - phone
+        * `pincode` - pincode
+    FollowUp:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        report_request:
+          type: string
+          format: uuid
+          readOnly: true
+        report_ref:
+          type: string
+          readOnly: true
+        customer_phone:
+          type: string
+          readOnly: true
+        amount_paise:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/FollowUpStatusEnum'
+        assigned_to:
+          type: string
+          format: uuid
+          nullable: true
+        assigned_to_email:
+          type: string
+          format: email
+          readOnly: true
+        priority:
+          allOf:
+          - $ref: '#/components/schemas/PriorityEnum'
+          minimum: 0
+          maximum: 9223372036854775807
+        next_reminder_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        escalation_level:
+          type: integer
+          readOnly: true
+        escalated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        closed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        close_reason:
+          type: string
+          maxLength: 255
+        last_note_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount_paise
+      - assigned_to_email
+      - closed_at
+      - created_at
+      - customer_phone
+      - escalated_at
+      - escalation_level
+      - id
+      - last_note_at
+      - next_reminder_at
+      - report_ref
+      - report_request
+    FollowUpStatusEnum:
+      enum:
+      - open
+      - in_progress
+      - escalated
+      - closed_paid
+      - closed_lost
+      - closed_manual
+      type: string
+      description: |-
+        * `open` - Open
+        * `in_progress` - In progress
+        * `escalated` - Escalated
+        * `closed_paid` - Closed — paid
+        * `closed_lost` - Closed — lost
+        * `closed_manual` - Closed — manually
+    GenderEnum:
+      enum:
+      - M
+      - F
+      - O
+      type: string
+      description: |-
+        * `M` - Male
+        * `F` - Female
+        * `O` - Other
+    KindEnum:
+      enum:
+      - auto
+      - manual
+      type: string
+      description: |-
+        * `auto` - Automatic
+        * `manual` - Manual
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - email
+      - password
+    ManualMessageRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        template_key:
+          $ref: '#/components/schemas/TemplateKeyEnum'
+        template_params:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 500
+    MessageLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        customer:
+          type: string
+          format: uuid
+          nullable: true
+        direction:
+          $ref: '#/components/schemas/DirectionEnum'
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+        template_name:
+          type: string
+          maxLength: 128
+        body_redacted:
+          type: string
+        status:
+          $ref: '#/components/schemas/MessageStatusEnum'
+        error_code:
+          type: string
+          maxLength: 32
+        error_detail:
+          type: string
+          maxLength: 255
+        sent_by:
+          type: string
+          format: email
+          readOnly: true
+        report_ref:
+          type: string
+          readOnly: true
+        wa_message_id:
+          type: string
+          nullable: true
+          maxLength: 128
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - created_at
+      - direction
+      - id
+      - report_ref
+      - sent_by
+      - status
+    MessageStatusEnum:
+      enum:
+      - received
+      - queued
+      - sent
+      - delivered
+      - read
+      - failed
+      type: string
+      description: |-
+        * `received` - Received
+        * `queued` - Queued
+        * `sent` - Sent
+        * `delivered` - Delivered
+        * `read` - Read
+        * `failed` - Failed
+    Note:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        author:
+          type: string
+          format: email
+          readOnly: true
+        channel:
+          $ref: '#/components/schemas/ChannelEnum'
+        outcome:
+          oneOf:
+          - $ref: '#/components/schemas/OutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        body:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - author
+      - body
+      - created_at
+      - id
+    NoteRequest:
+      type: object
+      properties:
+        channel:
+          $ref: '#/components/schemas/ChannelEnum'
+        outcome:
+          oneOf:
+          - $ref: '#/components/schemas/OutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        body:
+          type: string
+          minLength: 1
+      required:
+      - body
+    OutcomeEnum:
+      enum:
+      - no_answer
+      - callback
+      - promised_to_pay
+      - paid_claimed
+      - not_interested
+      - wrong_number
+      - other
+      type: string
+      description: |-
+        * `no_answer` - No answer
+        * `callback` - Asked for callback
+        * `promised_to_pay` - Promised to pay
+        * `paid_claimed` - Says already paid
+        * `not_interested` - Not interested
+        * `wrong_number` - Wrong number
+        * `other` - Other
+    PaginatedAuditLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+    PaginatedCustomerList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Customer'
+    PaginatedFollowUpList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FollowUp'
+    PaginatedMessageLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageLog'
+    PaginatedNoteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Note'
+    PaginatedPaymentLinkList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentLink'
+    PaginatedPaymentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
+    PaginatedRefundList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Refund'
+    PaginatedReminderList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reminder'
+    PaginatedReportRequestList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportRequest'
+    PaginatedStaffList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Staff'
+    PatchedFollowUpRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/FollowUpStatusEnum'
+        assigned_to:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          allOf:
+          - $ref: '#/components/schemas/PriorityEnum'
+          minimum: 0
+          maximum: 9223372036854775807
+        close_reason:
+          type: string
+          maxLength: 255
+    PatchedStaffRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        payment_link:
+          type: string
+          format: uuid
+        report_ref:
+          type: string
+        razorpay_payment_id:
+          type: string
+          maxLength: 64
+        amount_paise:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        amount_refunded_paise:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        refundable_paise:
+          type: integer
+          readOnly: true
+        currency:
+          type: string
+          maxLength: 3
+        method:
+          type: string
+          maxLength: 32
+        status:
+          $ref: '#/components/schemas/PaymentStatusEnum'
+        captured_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount_paise
+      - created_at
+      - id
+      - payment_link
+      - razorpay_payment_id
+      - refundable_paise
+      - report_ref
+      - status
+    PaymentLink:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        report_request:
+          type: string
+          format: uuid
+        report_ref:
+          type: string
+        attempt:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        reference_id:
+          type: string
+          maxLength: 40
+        razorpay_link_id:
+          type: string
+          nullable: true
+          maxLength: 64
+        short_url:
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 200
+          - type: string
+            maxLength: 0
+        amount_paise:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        currency:
+          type: string
+          maxLength: 3
+        status:
+          $ref: '#/components/schemas/PaymentLinkStatusEnum'
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        sent_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        last_sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount_paise
+      - attempt
+      - created_at
+      - id
+      - reference_id
+      - report_ref
+      - report_request
+    PaymentLinkBrief:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        reference_id:
+          type: string
+          maxLength: 40
+        status:
+          $ref: '#/components/schemas/PaymentLinkStatusEnum'
+        amount_paise:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        short_url:
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 200
+          - type: string
+            maxLength: 0
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        sent_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        last_sent_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - amount_paise
+      - id
+      - reference_id
+    PaymentLinkStatusEnum:
+      enum:
+      - pending
+      - active
+      - paid
+      - expired
+      - cancelled
+      - failed
+      type: string
+      description: |-
+        * `pending` - Pending (not yet created at Razorpay)
+        * `active` - Active
+        * `paid` - Paid
+        * `expired` - Expired
+        * `cancelled` - Cancelled
+        * `failed` - Creation failed
+    PaymentStatusEnum:
+      enum:
+      - authorized
+      - captured
+      - failed
+      - partially_refunded
+      - refunded
+      type: string
+      description: |-
+        * `authorized` - Authorized
+        * `captured` - Captured
+        * `failed` - Failed
+        * `partially_refunded` - Partially refunded
+        * `refunded` - Refunded
+    PriorityEnum:
+      enum:
+      - 1
+      - 2
+      - 3
+      type: integer
+      description: |-
+        * `1` - Low
+        * `2` - Normal
+        * `3` - High
+    Refund:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        payment:
+          type: string
+          format: uuid
+        razorpay_payment_id:
+          type: string
+          readOnly: true
+        razorpay_refund_id:
+          type: string
+          nullable: true
+          maxLength: 64
+        amount_paise:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        reason:
+          type: string
+        status:
+          $ref: '#/components/schemas/RefundStatusEnum'
+        requested_by:
+          type: string
+          format: email
+          readOnly: true
+        approved_by:
+          type: string
+          format: email
+          readOnly: true
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+        failure_reason:
+          type: string
+          maxLength: 255
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount_paise
+      - approved_by
+      - created_at
+      - id
+      - payment
+      - razorpay_payment_id
+      - reason
+      - requested_by
+    RefundRequestRequest:
+      type: object
+      properties:
+        amount_paise:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      required:
+      - amount_paise
+      - reason
+    RefundStatusEnum:
+      enum:
+      - requested
+      - approved
+      - rejected
+      - processing
+      - processed
+      - failed
+      type: string
+      description: |-
+        * `requested` - Requested
+        * `approved` - Approved
+        * `rejected` - Rejected
+        * `processing` - Processing at Razorpay
+        * `processed` - Processed
+        * `failed` - Failed
+    Reminder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        follow_up:
+          type: string
+          format: uuid
+          readOnly: true
+        scheduled_for:
+          type: string
+          format: date-time
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/KindEnum'
+          readOnly: true
+        template_name:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ReminderStatusEnum'
+          readOnly: true
+        skip_reason:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - follow_up
+      - id
+      - kind
+      - scheduled_for
+      - skip_reason
+      - status
+      - template_name
+    ReminderRequest:
+      type: object
+      properties:
+        scheduled_for:
+          type: string
+          format: date-time
+      required:
+      - scheduled_for
+    ReminderStatusEnum:
+      enum:
+      - scheduled
+      - sent
+      - skipped
+      - failed
+      - cancelled
+      type: string
+      description: |-
+        * `scheduled` - Scheduled
+        * `sent` - Sent
+        * `skipped` - Skipped
+        * `failed` - Failed
+        * `cancelled` - Cancelled
+    ReportRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        public_ref:
+          type: string
+          readOnly: true
+        customer:
+          type: string
+          format: uuid
+        customer_phone:
+          type: string
+        report_status:
+          $ref: '#/components/schemas/ReportStatusEnum'
+        delivery_status:
+          $ref: '#/components/schemas/DeliveryStatusEnum'
+        payment_status:
+          type: string
+          readOnly: true
+        price_paise:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Price snapshot at creation, in paise
+        currency:
+          type: string
+          maxLength: 3
+        failure_code:
+          type: string
+          maxLength: 64
+        failure_detail:
+          type: string
+          description: Operator-facing; must not contain PII
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        status_changed_at:
+          type: string
+          format: date-time
+        generated_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Generated report can be sold until
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        followup:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        has_document:
+          type: boolean
+          readOnly: true
+      required:
+      - created_at
+      - customer
+      - customer_phone
+      - followup
+      - has_document
+      - id
+      - payment_status
+      - price_paise
+      - public_ref
+    ReportRequestDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        public_ref:
+          type: string
+          readOnly: true
+        customer:
+          type: string
+          format: uuid
+        customer_phone:
+          type: string
+        report_status:
+          $ref: '#/components/schemas/ReportStatusEnum'
+        delivery_status:
+          $ref: '#/components/schemas/DeliveryStatusEnum'
+        payment_status:
+          type: string
+          readOnly: true
+        price_paise:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Price snapshot at creation, in paise
+        currency:
+          type: string
+          maxLength: 3
+        failure_code:
+          type: string
+          maxLength: 64
+        failure_detail:
+          type: string
+          description: Operator-facing; must not contain PII
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        status_changed_at:
+          type: string
+          format: date-time
+        generated_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Generated report can be sold until
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        followup:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        has_document:
+          type: boolean
+          readOnly: true
+        payment_links:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentLinkBrief'
+        otp_attempts:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        otp_resends:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        provider_name:
+          type: string
+          maxLength: 50
+      required:
+      - created_at
+      - customer
+      - customer_phone
+      - followup
+      - has_document
+      - id
+      - payment_links
+      - payment_status
+      - price_paise
+      - public_ref
+    ReportStatusEnum:
+      enum:
+      - draft
+      - consented
+      - otp_sent
+      - otp_verified
+      - fetching
+      - generated
+      - failed
+      - no_hit
+      - expired
+      - cancelled
+      type: string
+      description: |-
+        * `draft` - Collecting details
+        * `consented` - Consent given
+        * `otp_sent` - OTP sent
+        * `otp_verified` - OTP verified
+        * `fetching` - Fetching report
+        * `generated` - Report generated
+        * `failed` - Failed
+        * `no_hit` - No credit history
+        * `expired` - Expired
+        * `cancelled` - Cancelled
+    RevealRequest:
+      type: object
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldsEnum'
+          minItems: 1
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - fields
+      - reason
+    RevenueRow:
+      type: object
+      properties:
+        period:
+          type: string
+        payments:
+          type: integer
+        gross_paise:
+          type: integer
+        refunds_paise:
+          type: integer
+        net_paise:
+          type: integer
+      required:
+      - gross_paise
+      - net_paise
+      - payments
+      - period
+      - refunds_paise
+    RoleEnum:
+      enum:
+      - super_admin
+      - admin
+      - agent
+      - finance
+      - auditor
+      type: string
+      description: |-
+        * `super_admin` - Super Admin
+        * `admin` - Admin
+        * `agent` - Follow-up Agent
+        * `finance` - Finance
+        * `auditor` - Auditor (read-only)
+    Staff:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+          title: Email address
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        last_login:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        last_login_ip:
+          type: string
+          readOnly: true
+          nullable: true
+        date_joined:
+          type: string
+          format: date-time
+          readOnly: true
+        two_factor_enrolled:
+          type: boolean
+          readOnly: true
+      required:
+      - date_joined
+      - email
+      - id
+      - last_login
+      - last_login_ip
+      - two_factor_enrolled
+    StaffCreateRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          title: Email address
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    TemplateKeyEnum:
+      enum:
+      - payment_link
+      - payment_reminder
+      type: string
+      description: |-
+        * `payment_link` - payment_link
+        * `payment_reminder` - payment_reminder
+    TokenRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+          pattern: ^\d{6}$
+      required:
+      - token
+    TypeEnum:
+      enum:
+      - text
+      - template
+      - interactive
+      - document
+      - image
+      - other
+      type: string
+      description: |-
+        * `text` - Text
+        * `template` - Template
+        * `interactive` - Interactive
+        * `document` - Document
+        * `image` - Image
+        * `other` - Other
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid

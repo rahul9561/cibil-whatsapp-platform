@@ -44,10 +44,13 @@ inspected before any change, and nothing is overwritten without confirmation.
   documented in each `mock.py`); services in each app's `services.py`; tasks in `reports/tasks.py` and
   `payments/tasks.py`, routed by `CELERY_TASK_ROUTES`. Verified end to end through the live worker in Docker.
 
-## Phase 5 — Backend REST APIs
+## Phase 5 — Backend REST APIs ✅
 - DRF viewsets per §8 of the architecture, filters, pagination, OpenAPI schema.
 - Object-level permissions, PII masking/reveal, audited PDF download.
 - **Exit:** API tests for every endpoint × role matrix; OpenAPI schema generated.
+- Done: 49 operations under `/api/v1/` (`config/api_urls.py`); schema at `/api/v1/schema`, Swagger UI at
+  `/api/v1/docs` (staff only), exported to `docs/openapi.yaml`. Settings are read-only for now; editing them
+  at runtime needs a DB-backed settings model (to schedule with the dashboard work).
 
 ## Phase 6 — Razorpay integration
 - Real `RazorpayGateway` using official SDK (test mode), payment-link creation/resend/cancel.

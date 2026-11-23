@@ -11,6 +11,7 @@ from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django_otp import devices_for_user, user_has_device
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -61,6 +62,7 @@ def session_state(request) -> dict:
 class CsrfView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(request=None, responses=dict)
     @method_decorator(ensure_csrf_cookie)
     def get(self, request):
         return Response({"detail": "ok"})
@@ -73,6 +75,7 @@ class LoginView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "login"
 
+    @extend_schema(request=LoginSerializer, responses=dict)
     def post(self, request):
         ser = LoginSerializer(data=request.data)
         if not ser.is_valid():
@@ -112,6 +115,7 @@ class LoginView(APIView):
 class MeView(APIView):
     permission_classes = [IsPasswordAuthenticated]
 
+    @extend_schema(request=None, responses=dict)
     def get(self, request):
         return Response(session_state(request))
 
@@ -119,6 +123,7 @@ class MeView(APIView):
 class LogoutView(APIView):
     permission_classes = [IsPasswordAuthenticated]
 
+    @extend_schema(request=None, responses={204: None})
     def post(self, request):
         audit.record("auth.logout", request=request, obj=request.user)
         logout(request)
@@ -131,6 +136,7 @@ class TwoFactorSetupView(APIView):
 
     permission_classes = [IsPasswordAuthenticated]
 
+    @extend_schema(request=None, responses=dict)
     def post(self, request):
         user = request.user
         if user_has_device(user, confirmed=True):
@@ -149,6 +155,7 @@ class TwoFactorConfirmView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "otp"
 
+    @extend_schema(request=TokenSerializer, responses=dict)
     def post(self, request):
         ser = TokenSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -171,6 +178,7 @@ class TwoFactorVerifyView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "otp"
 
+    @extend_schema(request=TokenSerializer, responses=dict)
     def post(self, request):
         ser = TokenSerializer(data=request.data)
         ser.is_valid(raise_exception=True)

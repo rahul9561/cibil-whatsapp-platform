@@ -238,6 +238,40 @@ class ReportService:
                 _system("report.failed", req, code=code)
             return req.report_status
 
+    def cancel(self, request_id, *, by_user, reason: str) -> ReportRequest:
+        """Staff cancellation: also cancels open payment links and closes the follow-up."""
+        from apps.followups.models import FollowUpStatus, ReminderStatus
+        from apps.payments.gateway import get_payment_gateway
+
+        with transaction.atomic():
+            req = ReportRequest.objects.select_for_update().get(pk=request_id)
+            if req.payment_links.filter(status=PaymentLinkStatus.PAID).exists():
+                raise InvalidTransition(f"{req.public_ref}: already paid; refund instead of cancelling")
+            req.transition_to(
+                ReportStatus.CANCELLED, failure_code="cancelled_by_staff", failure_detail=reason
+            )
+            req.save()
+            open_links = list(
+                req.payment_links.filter(status__in=[PaymentLinkStatus.PENDING, PaymentLinkStatus.ACTIVE])
+            )
+            for link in open_links:
+                link.status = PaymentLinkStatus.CANCELLED
+                link.save(update_fields=["status"])
+            followup = getattr(req, "followup", None)
+            if followup is not None and followup.is_open:
+                followup.status, followup.closed_at = FollowUpStatus.CLOSED_MANUAL, timezone.now()
+                followup.close_reason, followup.next_reminder_at = f"Request cancelled: {reason}"[:255], None
+                followup.save()
+                followup.reminders.filter(status=ReminderStatus.SCHEDULED).update(
+                    status=ReminderStatus.CANCELLED, skip_reason="request_cancelled"
+                )
+            audit.record("report.cancelled", actor=by_user, obj=req, changes={"reason": reason})
+        gateway = get_payment_gateway()
+        for link in open_links:
+            if link.razorpay_link_id:
+                gateway.cancel_payment_link(link.razorpay_link_id)
+        return req
+
     # -- delivery ------------------------------------------------------------------------------------
 
     def deliver(self, request_id):

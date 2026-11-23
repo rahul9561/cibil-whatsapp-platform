@@ -6,3 +6,5 @@ redis==8.1.0
 mysqlclient==2.3.2
 cryptography==50.0.2
 django-otp==1.7.5
+django-filter==26.2
+drf-spectacular==0.30.0

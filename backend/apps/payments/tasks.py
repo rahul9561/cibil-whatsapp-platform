@@ -39,3 +39,11 @@ def confirm_payment_task(self, razorpay_link_id: str):
         return "paid"
 
     return run_with_retries(self, run)
+
+
+@shared_task(bind=True, max_retries=6, name="payments.process_refund")
+def process_refund_task(self, refund_id: str):
+    from .services import RefundService
+
+    refund = run_with_retries(self, lambda: RefundService().process(refund_id))
+    return refund.status if refund else None
