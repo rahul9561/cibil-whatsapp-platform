@@ -27,6 +27,7 @@ SENSITIVE_KEYS = frozenset(
         "body",
         "full_name",
         "address",
+        "pincode",
     }
 )
 

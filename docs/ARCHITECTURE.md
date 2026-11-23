@@ -88,7 +88,9 @@ cibil-whatsapp-platform/
 | `Conversation` | `state` | see §5 (bot flow position) |
 | `ReportRequest` | `report_status` | `DRAFT → CONSENTED → OTP_SENT → OTP_VERIFIED → FETCHING → GENERATED → (FAILED \| NO_HIT \| EXPIRED \| CANCELLED)` |
 | `ReportRequest` | `delivery_status` | `NOT_DELIVERED → QUEUED → SENT → DELIVERED → READ \| FAILED` |
-| `PaymentLink` / `Payment` | `status` | link: `CREATED → SENT → PAID \| EXPIRED \| CANCELLED`; payment: `AUTHORIZED → CAPTURED \| FAILED → (REFUND_PENDING → REFUNDED \| PARTIALLY_REFUNDED)` |
+| `PaymentLink` | `status` | `PENDING → ACTIVE → PAID \| EXPIRED \| CANCELLED`, or `PENDING → FAILED` (sending is tracked by `sent_count`, not a status) |
+| `Payment` | `status` | `AUTHORIZED → CAPTURED \| FAILED`; `CAPTURED → PARTIALLY_REFUNDED → REFUNDED` |
+| `Refund` | `status` | `REQUESTED → APPROVED \| REJECTED`; `APPROVED → PROCESSING → PROCESSED \| FAILED` |
 | `FollowUp` | `status` | `OPEN → IN_PROGRESS → ESCALATED → CLOSED_PAID \| CLOSED_LOST \| CLOSED_MANUAL` |
 
 Derived "overall" views (e.g. "generated but unpaid") are **queries**, not stored fields.
@@ -99,7 +101,8 @@ Derived "overall" views (e.g. "generated but unpaid") are **queries**, not store
 erDiagram
     Customer ||--o{ ConsentRecord : gives
     Customer ||--o{ ReportRequest : requests
-    Customer ||--o{ Conversation : has
+    ReportRequest |o--o| ConsentRecord : authorised_by
+    Customer ||--o| Conversation : has
     ReportRequest ||--o| ReportDocument : produces
     ReportRequest ||--o{ PaymentLink : billed_by
     PaymentLink ||--o{ Payment : paid_by
@@ -110,6 +113,15 @@ erDiagram
     Customer ||--o{ MessageLog : exchanges
     User ||--o{ FollowUp : assigned
 ```
+
+> **Phase 3 notes (as built):** encrypted fields are named plainly (`wa_id`, `full_name`, `pan`, `dob`,
+> `email`, `pincode`) and typed `EncryptedTextField`; blind indexes are `wa_id_hash` / `pan_hash`.
+> `ReportRequest.consent` points at the `ConsentRecord` (not the other way round) so `customers` does not
+> depend on `reports`. One `Conversation` per customer (its state resets per request; history is in
+> `MessageLog`). `PaymentLink.open_lock` enforces one open link per request, the same way `active_lock`
+> enforces one open request per customer. A request stays open while `GENERATED` until delivered.
+> Refunds enforce a four-eyes rule in the database (approver ≠ requester). Django admin is read-only
+> and requires a 2FA-verified session (`OTPAdminSite`).
 
 **Customer**
 - `id` (UUID), `wa_id_hash` (HMAC blind index, unique), `wa_id_enc`

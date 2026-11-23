@@ -7,6 +7,10 @@ requires-python = ">=3.11"
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py"]
 addopts = "-ra --strict-markers"
+filterwarnings = [
+    # Admin form for PaymentLink.short_url; Django 6 switches URLField to https by default. Drop on upgrade.
+    "ignore:The default scheme will be changed:django.utils.deprecation.RemovedInDjango60Warning",
+]
 testpaths = ["apps"]
 
 [tool.coverage.run]

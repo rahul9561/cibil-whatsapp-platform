@@ -29,6 +29,12 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.audit",
+    "apps.customers",
+    "apps.reports",
+    "apps.payments",
+    "apps.messaging",
+    "apps.conversations",
+    "apps.followups",
 ]
 
 MIDDLEWARE = [

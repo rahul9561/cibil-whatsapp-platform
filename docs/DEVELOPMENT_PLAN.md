@@ -27,10 +27,11 @@ inspected before any change, and nothing is overwritten without confirmation.
 - `audit`: append-only `AuditLog` with hash chain, `verify_audit_chain` command, request-id middleware.
 - **Exit:** tests for encryption round-trip/rotation, blind index lookup, audit immutability, role checks.
 
-## Phase 3 — Domain models & migrations
+## Phase 3 — Domain models & migrations ✅
 - `customers`, `reports`, `payments`, `followups`, `messaging`, `conversations`, `WebhookEvent`.
 - Status enums kept separate; `active_lock` unique constraint; all unique external IDs.
-- Django admin (read-only, internal use) for debugging.
+- Django admin (read-only, 2FA-protected, PII masked) for debugging.
+- Shared factory_boy factories in `apps/core/testing/factories.py`.
 - **Exit:** migrations apply on MySQL; model tests for constraints (duplicate active request rejected, etc.).
 
 ## Phase 4 — Service layer & adapters (mocks)
