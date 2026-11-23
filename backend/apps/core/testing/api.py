@@ -29,9 +29,11 @@ def client_for(role=None, user=None) -> tuple[Client, object]:
 
 def make_request(*, generated=True, paid=False, assigned_to=None, wa_id=None, pan="ABCDE1234F"):
     """Run a request through the real services (mock adapters). Returns the ReportRequest."""
-    from apps.payments.tasks import confirm_payment_task
-    from apps.reports.tasks import fetch_report_task, initiate_otp_task
+    from apps.payments.tasks import confirm_payment_task, create_payment_link_task
+    from apps.reports.tasks import fetch_report_task
 
+    # Steps run in-process (service calls / task.apply), so this works both under eager Celery in tests and
+    # against a live worker (e.g. seed_dev_staff --demo-data).
     kwargs = {"pan": pan, "full_name": "Rahul Sharma"}
     if wa_id:
         kwargs["wa_id"] = wa_id
@@ -42,15 +44,17 @@ def make_request(*, generated=True, paid=False, assigned_to=None, wa_id=None, pa
     if not generated:
         return req
     svc.record_consent(req.pk, text_version="v1", text=CONSENT_TEXT)
-    initiate_otp_task.delay(str(req.pk))
+    svc.initiate_otp(req.pk)
     svc.verify_otp(req.pk, "123456")
-    fetch_report_task.delay(str(req.pk))
+    fetch_report_task.apply(args=[str(req.pk)])
     req.refresh_from_db()
+    if req.report_status == "generated":
+        create_payment_link_task.apply(args=[str(req.pk)])  # idempotent if the chained task already ran
     if assigned_to is not None:
         FollowUp.objects.filter(report_request=req).update(assigned_to=assigned_to)
     if paid:
         link = req.payment_links.get()
         simulate_payment(link.razorpay_link_id)
-        confirm_payment_task.delay(link.razorpay_link_id)
+        confirm_payment_task.apply(args=[link.razorpay_link_id])
         req.refresh_from_db()
     return req

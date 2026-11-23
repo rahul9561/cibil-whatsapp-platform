@@ -324,3 +324,14 @@ def test_schema_served_to_staff():
     admin, _ = client_for(Role.ADMIN)
     resp = admin.get("/api/v1/schema")
     assert resp.status_code == 200 and b"/api/v1/report-requests" in resp.content
+
+
+def test_assignee_picker_for_admins_only():
+    admin, _ = client_for(Role.ADMIN)
+    agent_client, agent = client_for(Role.AGENT)
+    UserFactory(role=Role.AUDITOR)
+    UserFactory(role=Role.AGENT, is_active=False)
+    rows = admin.get("/api/v1/follow-ups/assignees").json()
+    assert {r["role"] for r in rows} <= {"agent", "admin", "super_admin"}
+    assert str(agent.pk) in {r["id"] for r in rows} and set(rows[0]) == {"id", "email", "role"}
+    assert agent_client.get("/api/v1/follow-ups/assignees").status_code == 403

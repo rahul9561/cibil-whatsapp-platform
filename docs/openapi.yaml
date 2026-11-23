@@ -1015,6 +1015,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedReminderList'
           description: ''
+  /api/v1/follow-ups/assignees:
+    get:
+      operationId: follow_ups_assignees_retrieve
+      description: |-
+        Staff who can work follow-ups (for the assignment picker). Admins lack staff.manage, so this
+        exposes only what assignment needs: id, email, role.
+      tags:
+      - follow-ups
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
   /api/v1/messages:
     get:
       operationId: messages_list
@@ -3031,6 +3049,7 @@ components:
     ReminderStatusEnum:
       enum:
       - scheduled
+      - queued
       - sent
       - skipped
       - failed
@@ -3038,6 +3057,7 @@ components:
       type: string
       description: |-
         * `scheduled` - Scheduled
+        * `queued` - Queued for sending
         * `sent` - Sent
         * `skipped` - Skipped
         * `failed` - Failed

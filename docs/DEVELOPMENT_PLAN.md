@@ -91,11 +91,17 @@ inspected before any change, and nothing is overwritten without confirmation.
 - Not built yet: in-app/e-mail notification to assignees on escalation (escalations show on the dashboard and
   in the follow-up queue with priority HIGH).
 
-## Phase 9 — React admin dashboard
+## Phase 9 — React admin dashboard ✅
 - Vite + Tailwind scaffold, auth/2FA, layout, role-aware navigation.
 - Pages in order: Follow-ups queue (highest business value) → Report requests → Payments/Refunds →
   Customers → Messages → Dashboard/Analytics → Staff → Audit → Settings.
 - **Exit:** Vitest/RTL tests for key flows; production build served by Nginx locally.
+- Done: Vite + React 18 + React Router + TanStack Query + Tailwind + Recharts; every page listed above; role-aware
+  navigation; 2FA enrolment with QR code. Served by nginx at http://localhost:8080 in the dev stack
+  (`infrastructure/nginx/dev.conf`). `seed_dev_staff` creates local accounts and demo data.
+- Deviations: plain controlled forms instead of React Hook Form + Zod (forms are small); JavaScript rather
+  than TypeScript; Prettier for formatting (no ESLint yet). Backend addition: `GET follow-ups/assignees`
+  so admins can assign without the staff-management capability.
 
 ## Phase 10 — Real provider adapter (when docs are available)
 - Implement the authorised partner's adapter strictly from its documentation; contract tests against its sandbox.

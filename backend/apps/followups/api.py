@@ -155,6 +155,7 @@ class FollowUpViewSet(
         "list": "followup.view",
         "retrieve": "followup.view",
         "partial_update": "followup.manage",
+        "assignees": "followup.assign",
         "notes": "followup.view",
         "reminders": "followup.view",
     }
@@ -198,6 +199,19 @@ class FollowUpViewSet(
                     "after": {k: str(v.pk if hasattr(v, "pk") else v) for k, v in data.items()},
                 },
             )
+
+    @extend_schema(responses=dict)
+    @action(detail=False, methods=["get"])
+    def assignees(self, request):
+        """Staff who can work follow-ups (for the assignment picker). Admins lack staff.manage, so this
+        exposes only what assignment needs: id, email, role."""
+        users = (
+            get_user_model()
+            .objects.filter(is_active=True, role__in=[Role.AGENT, Role.ADMIN, Role.SUPER_ADMIN])
+            .order_by("email")
+            .values("id", "email", "role")
+        )
+        return Response(list(users))
 
     @extend_schema(request=NoteSerializer, responses=NoteSerializer(many=True))
     @action(detail=True, methods=["get", "post"])
