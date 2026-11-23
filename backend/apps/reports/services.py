@@ -1,0 +1,282 @@
+"""Report request lifecycle: consent -> OTP -> verify -> fetch -> store -> deliver.
+
+See ARCHITECTURE §4, §6.2, §6.5.
+
+Concurrency model: the DB row lock (select_for_update) guards status changes; a short distributed lock
+guards each external call so two workers never call the provider for the same request at once.
+The provider is never called while a DB row lock is held.
+"""
+
+import hashlib
+import re
+from datetime import date, timedelta
+
+from django.conf import settings
+from django.db import IntegrityError, transaction
+from django.utils import timezone
+
+from apps.audit import service as audit
+from apps.audit.models import ActorType
+from apps.core.integrations import NotConfiguredError, PermanentError, distributed_lock
+from apps.customers.models import ConsentRecord
+from apps.messaging.services import MessagingService
+from apps.payments.models import PaymentLinkStatus
+
+from .models import DeliveryStatus, InvalidTransition, ReportDocument, ReportRequest, ReportStatus
+from .providers import get_provider
+from .providers.base import Applicant, OtpSession, ReportOutcome, VerifyOutcome
+from .storage import ReportStorage
+
+_OTP_FORMAT = re.compile(r"^\d{4,8}$")
+
+
+class OtpResendLimit(PermanentError):
+    def __init__(self):
+        super().__init__("OTP resend limit reached", code="otp_resend_limit")
+
+
+class NotPaid(PermanentError):
+    def __init__(self):
+        super().__init__("report has no verified payment", code="not_paid")
+
+
+def _system(action, obj, **changes):
+    audit.record(action, actor_type=ActorType.SYSTEM, obj=obj, changes=changes)
+
+
+class ReportService:
+    def __init__(
+        self, provider=None, storage: ReportStorage | None = None, messaging: MessagingService | None = None
+    ):
+        self._provider = provider
+        self.storage = storage or ReportStorage()
+        self._messaging = messaging
+
+    @property
+    def provider(self):
+        if self._provider is None:
+            self._provider = get_provider()
+        return self._provider
+
+    @property
+    def messaging(self) -> MessagingService:
+        if self._messaging is None:
+            self._messaging = MessagingService()
+        return self._messaging
+
+    # -- creation & consent --------------------------------------------------------------------------
+
+    def start_request(self, customer) -> tuple[ReportRequest, bool]:
+        """Return (request, created). An existing open request is returned instead of a duplicate."""
+        if settings.REPORT_PRICE_PAISE <= 0:
+            raise NotConfiguredError("REPORT_PRICE_PAISE is not set", code="price_not_configured")
+        existing = ReportRequest.objects.filter(active_lock=customer.pk).first()
+        if existing:
+            return existing, False
+        try:
+            with transaction.atomic():
+                req = ReportRequest.objects.create(customer=customer, price_paise=settings.REPORT_PRICE_PAISE)
+        except IntegrityError:  # lost a race with a concurrent start for the same customer
+            return ReportRequest.objects.get(active_lock=customer.pk), False
+        _system("report.started", req)
+        return req, True
+
+    def record_consent(
+        self, request_id, *, text_version: str, text: str, wa_message_id: str = ""
+    ) -> ConsentRecord:
+        with transaction.atomic():
+            req = ReportRequest.objects.select_for_update().select_related("customer").get(pk=request_id)
+            if req.consent_id:
+                return req.consent
+            req.transition_to(ReportStatus.CONSENTED)
+            consent = ConsentRecord.objects.create(
+                customer=req.customer,
+                purpose="credit_report_self",
+                consent_text_version=text_version,
+                consent_text_sha256=hashlib.sha256(text.encode()).hexdigest(),
+                wa_message_id=wa_message_id,
+            )
+            req.consent = consent
+            req.save()
+            _system("report.consented", req, consent_version=text_version)
+        return consent
+
+    # -- OTP -----------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _applicant(customer) -> Applicant:
+        return Applicant(
+            full_name=customer.full_name,
+            pan=customer.pan,
+            dob=date.fromisoformat(customer.dob),
+            mobile=customer.wa_id,
+            email=customer.email,
+            pincode=customer.pincode,
+            gender=customer.gender,
+        )
+
+    def initiate_otp(self, request_id) -> OtpSession:
+        """First call sends the OTP; later calls (while OTP_SENT) resend, up to OTP_MAX_RESENDS."""
+        with distributed_lock(f"report-otp:{request_id}"):
+            req = ReportRequest.objects.select_related("customer").get(pk=request_id)
+            if req.report_status == ReportStatus.CONSENTED:
+                session = self.provider.initiate_otp(
+                    self._applicant(req.customer), consent_ref=str(req.consent_id)
+                )
+                resend = False
+            elif req.report_status == ReportStatus.OTP_SENT:
+                if req.otp_resends >= settings.OTP_MAX_RESENDS:
+                    raise OtpResendLimit()
+                session = self.provider.resend_otp(req.provider_session_ref)
+                resend = True
+            else:
+                raise InvalidTransition(f"{req.public_ref}: cannot send OTP from {req.report_status}")
+
+            with transaction.atomic():
+                req = ReportRequest.objects.select_for_update().get(pk=request_id)
+                req.transition_to(ReportStatus.OTP_SENT)
+                req.provider_name = self.provider.name
+                req.provider_session_ref = session.session_ref
+                req.otp_sent_at, req.otp_expires_at = timezone.now(), session.expires_at
+                req.otp_attempts = 0  # a fresh OTP gets fresh attempts; resends are capped separately
+                if resend:
+                    req.otp_resends += 1
+                req.save()
+                _system("report.otp_resent" if resend else "report.otp_sent", req)
+        return session
+
+    def verify_otp(self, request_id, otp: str) -> VerifyOutcome:
+        """Verify via the provider. The OTP is only ever held in memory here (ARCHITECTURE §6.5)."""
+        otp = (otp or "").strip()
+        with distributed_lock(f"report-otp:{request_id}"):
+            with transaction.atomic():
+                req = ReportRequest.objects.select_for_update().get(pk=request_id)
+                if req.report_status != ReportStatus.OTP_SENT:
+                    raise InvalidTransition(f"{req.public_ref}: no OTP pending ({req.report_status})")
+                if not _OTP_FORMAT.match(otp):
+                    return VerifyOutcome.INVALID  # typo / not an OTP: not counted as an attempt
+                if req.otp_expires_at and req.otp_expires_at <= timezone.now():
+                    return VerifyOutcome.EXPIRED
+                # Count the attempt *before* calling the provider so a crash can't grant free guesses.
+                req.otp_attempts += 1
+                req.save(update_fields=["otp_attempts"])
+                session_ref = req.provider_session_ref
+
+            outcome = self.provider.verify_otp(session_ref, otp)
+            del otp
+
+            with transaction.atomic():
+                req = ReportRequest.objects.select_for_update().get(pk=request_id)
+                if outcome == VerifyOutcome.VERIFIED:
+                    req.transition_to(ReportStatus.OTP_VERIFIED)
+                elif outcome == VerifyOutcome.LOCKED:
+                    req.transition_to(ReportStatus.FAILED, failure_code="otp_locked")
+                elif outcome == VerifyOutcome.INVALID and req.otp_attempts >= settings.OTP_MAX_ATTEMPTS:
+                    req.transition_to(ReportStatus.FAILED, failure_code="otp_attempts_exceeded")
+                req.save()
+                _system("report.otp_checked", req, outcome=str(outcome), attempt=req.otp_attempts)
+        return outcome
+
+    # -- fetch ---------------------------------------------------------------------------------------
+
+    def fetch_report(self, request_id) -> str:
+        """Fetch exactly once. Returns the resulting report status. TransientError propagates for retry."""
+        with distributed_lock(f"report-fetch:{request_id}", timeout=300):
+            with transaction.atomic():
+                req = ReportRequest.objects.select_for_update().get(pk=request_id)
+                if req.report_status in {ReportStatus.GENERATED, ReportStatus.NO_HIT, ReportStatus.FAILED}:
+                    return req.report_status  # already done: idempotent
+                if req.report_status == ReportStatus.OTP_VERIFIED:
+                    req.transition_to(ReportStatus.FETCHING)  # claim: no second fetch can start
+                    req.save()
+                elif req.report_status != ReportStatus.FETCHING:  # FETCHING = resume after crash/retry
+                    raise InvalidTransition(f"{req.public_ref}: cannot fetch from {req.report_status}")
+                session_ref = req.provider_session_ref
+
+            try:
+                result = self.provider.fetch_report(session_ref)
+            except PermanentError as exc:
+                return self.mark_failed(request_id, exc.code)
+
+            if result.outcome == ReportOutcome.NO_HIT:
+                with transaction.atomic():
+                    req = ReportRequest.objects.select_for_update().get(pk=request_id)
+                    req.transition_to(ReportStatus.NO_HIT)
+                    req.save()
+                    _system("report.no_hit", req)
+                return ReportStatus.NO_HIT
+
+            if not result.pdf_bytes.startswith(b"%PDF-"):
+                return self.mark_failed(request_id, "invalid_report_document")
+
+            stored = self.storage.save(result.pdf_bytes)
+            now = timezone.now()
+            with transaction.atomic():
+                req = ReportRequest.objects.select_for_update().get(pk=request_id)
+                req.transition_to(ReportStatus.GENERATED)
+                req.provider_report_ref = result.report_ref
+                req.expires_at = now + timedelta(days=settings.REPORT_VALIDITY_DAYS)
+                req.save()
+                ReportDocument.objects.create(
+                    report_request=req,
+                    storage_key=stored.storage_key,
+                    sha256=stored.sha256,
+                    size_bytes=stored.size_bytes,
+                    encryption_key_id=stored.key_id,
+                    score=result.score,
+                    purge_after=now + timedelta(days=settings.REPORT_PDF_RETENTION_DAYS),
+                )
+                _system("report.generated", req, size_bytes=stored.size_bytes)
+        return ReportStatus.GENERATED
+
+    def mark_failed(self, request_id, code: str, detail: str = "") -> str:
+        with transaction.atomic():
+            req = ReportRequest.objects.select_for_update().get(pk=request_id)
+            if req.can_transition_to(ReportStatus.FAILED):
+                req.transition_to(ReportStatus.FAILED, failure_code=code, failure_detail=detail)
+                req.save()
+                _system("report.failed", req, code=code)
+            return req.report_status
+
+    # -- delivery ------------------------------------------------------------------------------------
+
+    def deliver(self, request_id):
+        """Send the PDF after a verified payment. Idempotent: delivers at most once."""
+        with transaction.atomic():
+            req = (
+                ReportRequest.objects.select_for_update()
+                .select_related("customer", "document")
+                .get(pk=request_id)
+            )
+            if req.delivery_status in {DeliveryStatus.SENT, DeliveryStatus.DELIVERED, DeliveryStatus.READ}:
+                return None
+            if req.report_status != ReportStatus.GENERATED:
+                raise InvalidTransition(f"{req.public_ref}: cannot deliver from {req.report_status}")
+            if not req.payment_links.filter(status=PaymentLinkStatus.PAID).exists():
+                raise NotPaid()
+            req.delivery_status = DeliveryStatus.QUEUED
+            req.save(update_fields=["delivery_status"])
+            doc = req.document
+
+        content = self.storage.read(doc.storage_key, expected_sha256=doc.sha256)
+        try:
+            msg = self.messaging.send_document(
+                req.customer,
+                content=content,
+                filename=f"credit-report-{req.public_ref}.pdf",
+                caption=f"Your credit report {req.public_ref}. Thank you for your payment.",
+                template_params=[req.public_ref],
+                idempotency_key=f"deliver:{req.pk}",
+                related_request=req,
+            )
+        except PermanentError as exc:
+            ReportRequest.objects.filter(pk=req.pk).update(delivery_status=DeliveryStatus.FAILED)
+            _system("report.delivery_failed", req, code=exc.code)
+            raise
+
+        with transaction.atomic():
+            req = ReportRequest.objects.select_for_update().get(pk=request_id)
+            req.delivery_status = DeliveryStatus.SENT
+            req.save(update_fields=["delivery_status"])
+            _system("report.delivered", req, message=str(msg.pk))
+        return msg

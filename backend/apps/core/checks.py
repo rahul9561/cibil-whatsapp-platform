@@ -23,3 +23,35 @@ def check_encryption_keys(app_configs, **kwargs):
     if blind and blind in keys:
         errors.append(Error("BLIND_INDEX_KEY must differ from every field encryption key.", id="core.E004"))
     return errors
+
+
+@register(Tags.security, deploy=False)
+def check_report_file_keys(app_configs, **kwargs):
+    from apps.reports.storage import StorageError, _keys
+
+    _keys.cache_clear()
+    try:
+        _keys()
+    except (StorageError, ValueError) as exc:
+        return [Error(f"REPORT_FILE_ENCRYPTION_KEYS invalid: {exc}", id="core.E005")]
+    return []
+
+
+@register(Tags.security, deploy=False)
+def check_mock_adapters(app_configs, **kwargs):
+    if settings.DEBUG or getattr(settings, "ALLOW_MOCK_ADAPTERS", False):
+        return []
+    mocked = [
+        name
+        for name in ("CREDIT_PROVIDER", "PAYMENT_GATEWAY", "WHATSAPP_GATEWAY")
+        if getattr(settings, name, "") == "mock"
+    ]
+    if mocked:
+        return [
+            Error(
+                f"Mock adapters configured with DEBUG off: {', '.join(mocked)}. "
+                "Set ALLOW_MOCK_ADAPTERS=true only for a non-production demo.",
+                id="core.E006",
+            )
+        ]
+    return []

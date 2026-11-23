@@ -13,6 +13,10 @@ os.environ.setdefault(
     "dGVzdC1rZXktMS0wMDAwMDAwMDAwMDAwMDAwMDAwMDA=,dGVzdC1rZXktMi0wMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
 )
 os.environ.setdefault("BLIND_INDEX_KEY", "test-blind-index-key-0123456789abcdef")
+os.environ.setdefault(
+    "REPORT_FILE_ENCRYPTION_KEYS",
+    "t1:dGVzdC1maWxlLWtleS0xLTAwMDAwMDAwMDAwMDAwMDA=,t0:dGVzdC1maWxlLWtleS0wLTAwMDAwMDAwMDAwMDAwMDA=",
+)
 
 from .base import *  # noqa: E402, F403
 from .base import BASE_DIR  # noqa: E402
@@ -28,3 +32,19 @@ PRIVATE_STORAGE_ROOT = BASE_DIR / ".pytest_cache" / "private_reports"
 LOG_FORMAT = "console"
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 INSTALLED_APPS = [*INSTALLED_APPS, "apps.core.tests.testapp"]  # noqa: F405
+CREDIT_PROVIDER = "mock"
+PAYMENT_GATEWAY = "mock"
+WHATSAPP_GATEWAY = "mock"
+REPORT_PRICE_PAISE = 9900
+ALLOW_MOCK_ADAPTERS = True
+
+# Tests always use their own fixed keys, even when real ones are in the environment (e.g. in the container).
+FIELD_ENCRYPTION_KEYS = [
+    "dGVzdC1rZXktMS0wMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
+    "dGVzdC1rZXktMi0wMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
+]
+BLIND_INDEX_KEY = "test-blind-index-key-0123456789abcdef"
+REPORT_FILE_ENCRYPTION_KEYS = [
+    "t1:dGVzdC1maWxlLWtleS0xLTAwMDAwMDAwMDAwMDAwMDA=",
+    "t0:dGVzdC1maWxlLWtleS0wLTAwMDAwMDAwMDAwMDAwMDA=",
+]

@@ -436,6 +436,22 @@ class CreditReportProvider(ABC):
 
 ---
 
+**Phase 4 notes (as built):**
+- Adapters are chosen by settings (`CREDIT_PROVIDER`, `PAYMENT_GATEWAY`, `WHATSAPP_GATEWAY`); dev and tests
+  use `mock`. A startup check refuses mock adapters when `DEBUG` is off unless `ALLOW_MOCK_ADAPTERS` is set.
+- OTP verification is a service call, not a Celery task, so the OTP never enters the broker. Phase 7 calls
+  it from the inbound-message path. Every attempt is counted before the provider call.
+- `fetch_report` claims the request (`OTP_VERIFIED → FETCHING`) in a DB transaction before calling the
+  provider, so a report is pulled at most once; a retry after a crash resumes from `FETCHING`.
+- External calls never run under a DB row lock; a short Redis lock (`distributed_lock`) serialises them per
+  request instead.
+- Transient adapter errors retry with jittered exponential backoff; when retries run out the request is
+  marked `FAILED` with `provider_unavailable` (no task is left silently dead).
+- Report PDFs: AES-256-GCM with the storage key as associated data (swapped files are detected); key id is
+  stored with each file so `REPORT_FILE_ENCRYPTION_KEYS` can rotate.
+- Duplicate payments (customer pays an old and a new link) are recorded and audited as `payment.duplicate`
+  for refund, never silently dropped.
+
 ## 10. Admin dashboard (React)
 
 Stack: Vite, React 18, React Router, TanStack Query, Tailwind, React Hook Form + Zod, Recharts.

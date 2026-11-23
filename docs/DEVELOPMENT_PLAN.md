@@ -34,12 +34,15 @@ inspected before any change, and nothing is overwritten without confirmation.
 - Shared factory_boy factories in `apps/core/testing/factories.py`.
 - **Exit:** migrations apply on MySQL; model tests for constraints (duplicate active request rejected, etc.).
 
-## Phase 4 — Service layer & adapters (mocks)
+## Phase 4 — Service layer & adapters (mocks) ✅
 - Adapter interfaces + `Mock*` implementations for provider, WhatsApp, Razorpay.
 - Services: `ReportService` (initiate OTP, verify, fetch, store PDF), `PaymentService`,
   `FollowUpService`, `MessagingService` (24-h window logic), `ReportStorage` (encrypted private files).
 - Celery tasks with typed retries and queues.
 - **Exit:** full happy path + failure paths run end-to-end against mocks in tests.
+- Done: adapters in `reports/providers`, `messaging/gateway`, `payments/gateway` (mock scenarios are
+  documented in each `mock.py`); services in each app's `services.py`; tasks in `reports/tasks.py` and
+  `payments/tasks.py`, routed by `CELERY_TASK_ROUTES`. Verified end to end through the live worker in Docker.
 
 ## Phase 5 — Backend REST APIs
 - DRF viewsets per §8 of the architecture, filters, pagination, OpenAPI schema.

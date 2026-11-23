@@ -100,6 +100,34 @@ TRUSTED_PROXY_COUNT = env.int("TRUSTED_PROXY_COUNT", default=0)
 FIELD_ENCRYPTION_KEYS = env.list("FIELD_ENCRYPTION_KEYS")  # newest first
 BLIND_INDEX_KEY = env("BLIND_INDEX_KEY")
 
+# --- Report files (ARCHITECTURE §6.3): AES-256-GCM keys as "key_id:base64-32-bytes", current key first.
+REPORT_FILE_ENCRYPTION_KEYS = env.list("REPORT_FILE_ENCRYPTION_KEYS")
+
+# --- Adapters: "mock" or a real adapter name (added in Phases 6, 7, 10). Empty = not configured. ---
+CREDIT_PROVIDER = env("CREDIT_PROVIDER", default="")
+PAYMENT_GATEWAY = env("PAYMENT_GATEWAY", default="")
+WHATSAPP_GATEWAY = env("WHATSAPP_GATEWAY", default="")
+# Mock adapters are refused when DEBUG is off unless this is set explicitly (e.g. a staging demo).
+ALLOW_MOCK_ADAPTERS = env.bool("ALLOW_MOCK_ADAPTERS", default=False)
+
+# --- Business rules (ARCHITECTURE §15 open question 2/5: confirm values before go-live) ---
+REPORT_PRICE_PAISE = env.int("REPORT_PRICE_PAISE", default=0)  # 0 = not configured; requests refuse to start
+REPORT_VALIDITY_DAYS = env.int("REPORT_VALIDITY_DAYS", default=7)
+REPORT_PDF_RETENTION_DAYS = env.int("REPORT_PDF_RETENTION_DAYS", default=30)
+OTP_MAX_ATTEMPTS = env.int("OTP_MAX_ATTEMPTS", default=3)
+OTP_MAX_RESENDS = env.int("OTP_MAX_RESENDS", default=2)
+PAYMENT_LINK_EXPIRY_HOURS = env.int("PAYMENT_LINK_EXPIRY_HOURS", default=72)
+FOLLOWUP_REMINDER_OFFSETS_HOURS = [
+    int(h) for h in env.list("FOLLOWUP_REMINDER_OFFSETS_HOURS", default=["1", "24", "72"])
+]
+WHATSAPP_TEMPLATE_LANGUAGE = env("WHATSAPP_TEMPLATE_LANGUAGE", default="en")
+# Logical name -> approved WhatsApp template name. Needed outside the 24-hour service window.
+WHATSAPP_TEMPLATES = {
+    "payment_link": env("WA_TEMPLATE_PAYMENT_LINK", default="payment_link_v1"),
+    "payment_reminder": env("WA_TEMPLATE_PAYMENT_REMINDER", default="payment_reminder_v1"),
+    "report_delivery": env("WA_TEMPLATE_REPORT_DELIVERY", default="report_delivery_v1"),
+}
+
 # --- Sessions / cookies (SPA uses session auth + CSRF, see ARCHITECTURE §6.6) ---
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
@@ -153,6 +181,10 @@ CELERY_TASK_DEFAULT_QUEUE = "default"
 # Queue names are declared in config/celery.py.
 CELERY_TASK_ROUTES = {
     "apps.core.tasks.*": {"queue": "default"},
+    "reports.initiate_otp": {"queue": "provider"},
+    "reports.fetch_report": {"queue": "provider"},
+    "reports.deliver_report": {"queue": "messaging"},
+    "payments.*": {"queue": "payments"},
 }
 CELERY_BEAT_SCHEDULE: dict = {}
 
