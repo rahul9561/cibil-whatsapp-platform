@@ -4,7 +4,7 @@ from .base import WhatsAppGateway
 
 GATEWAYS = {
     "mock": "apps.messaging.gateway.mock.MockWhatsAppGateway",
-    # "cloud_api": added in Phase 7.
+    "cloud_api": "apps.messaging.gateway.cloud_api.CloudApiWhatsAppGateway",
 }
 
 

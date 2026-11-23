@@ -264,6 +264,19 @@ window **must use pre-approved WhatsApp templates** (utility category). `Messagi
 
 ---
 
+**Phase 7 notes (as built):**
+- Inbound path: the webhook stores one `WebhookEvent` per message (sender encrypted, no text), parks the text
+  in Redis for `WHATSAPP_INBOUND_BODY_TTL` seconds and queues the event id. The worker reads the text once
+  (deleting it), takes a per-customer lock, logs the message with a placeholder for personal answers
+  (`[name]`, `[PAN]`, `[date of birth]`, `[OTP REDACTED]`), runs the state handler, saves, sends replies
+  (idempotent per message), then runs queued effects such as starting the fetch.
+- OTP verification runs inside that worker step, so the OTP never reaches the database, broker or logs.
+- Returning customers reuse their saved (encrypted) details after confirming them.
+- A report counts as finished once the PDF is handed to WhatsApp (`delivery_status = SENT`); delivery
+  receipts upgrade it to DELIVERED/READ but are not required to release the customer's request lock.
+- Background outcomes (no credit history, failure, delivered) are pushed to the customer by
+  `apps/conversations/notify.py` with conditional state updates.
+
 ## 6. Cross-cutting requirements
 
 ### 6.1 Idempotent Razorpay webhook processing

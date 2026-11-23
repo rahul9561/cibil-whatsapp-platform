@@ -112,3 +112,13 @@ def test_lock_cannot_point_at_another_customer():
     req = ReportRequestFactory()
     with pytest.raises(IntegrityError), transaction.atomic():
         ReportRequest.objects.filter(pk=req.pk).update(active_lock=CustomerFactory().pk)
+
+
+def test_sent_delivery_releases_the_lock_even_without_a_receipt():
+    customer = CustomerFactory()
+    req = advance(ReportRequestFactory(customer=customer), *HAPPY_PATH)
+    req.delivery_status = DeliveryStatus.SENT
+    req.save(update_fields=["delivery_status"])
+    req.refresh_from_db()
+    assert req.active_lock is None
+    ReportRequestFactory(customer=customer)

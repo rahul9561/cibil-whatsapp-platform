@@ -9,7 +9,7 @@ from celery import shared_task
 from apps.core.integrations import PermanentError
 from apps.core.tasks import run_with_retries
 
-from .models import ReportStatus
+from .models import ReportRequest, ReportStatus
 from .services import OtpResendLimit, ReportService
 
 
@@ -36,6 +36,11 @@ def fetch_report_task(self, request_id: str):
         lambda: service.fetch_report(request_id),
         on_give_up=lambda exc: service.mark_failed(request_id, "provider_unavailable"),
     )
+    if status is None:  # gave up after retries: the request is now FAILED
+        status = ReportRequest.objects.get(pk=request_id).report_status
+    from apps.conversations.notify import report_outcome
+
+    report_outcome(request_id)
     if status == ReportStatus.GENERATED:
         from apps.payments.tasks import create_payment_link_task
 
@@ -47,4 +52,8 @@ def fetch_report_task(self, request_id: str):
 def deliver_report_task(self, request_id: str):
     service = ReportService()
     msg = run_with_retries(self, lambda: service.deliver(request_id))
+    if msg is not None:
+        from apps.conversations.notify import report_delivered
+
+        report_delivered(request_id)
     return str(msg.pk) if msg else None

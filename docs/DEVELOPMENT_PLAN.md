@@ -66,12 +66,19 @@ inspected before any change, and nothing is overwritten without confirmation.
   refund. Confirm the duplicate-`reference_id` error text and the payment-link list filter against the
   current Razorpay docs at the same time.
 
-## Phase 7 — WhatsApp integration & conversation bot
+## Phase 7 — WhatsApp integration & conversation bot ✅ (code; live number test pending)
 - Real `CloudApiWhatsAppGateway`: text, interactive buttons, templates, media upload, documents.
 - Webhook: verify-token handshake, `X-Hub-Signature-256` check, dedupe, status updates → `MessageLog`.
 - Conversation state machine, validation, global commands, OTP redaction path.
 - **Needs:** WABA, phone number ID, access token, app secret, approved templates.
 - **Exit:** state-machine unit tests; OTP-never-persisted tests; manual test on a test number.
+- Done: `CloudApiWhatsAppGateway`, `GET/POST /webhooks/whatsapp`, bot (`apps/conversations/bot.py`),
+  customer copy in `apps/conversations/copy.py` (consent text is a draft for legal review), outcome
+  notifications, and `manage.py whatsapp_simulate` for chatting with the bot locally.
+- **Still to do with Meta credentials:** create the WhatsApp app and test number, set the five `WHATSAPP_*`
+  variables, register `https://<domain>/webhooks/whatsapp` (field `messages`), submit the three templates
+  (`payment_link_v1`, `payment_reminder_v1`, `report_delivery_v1` with a document header) for approval,
+  and run one real conversation. Re-check the Graph API version and error codes at the same time.
 
 ## Phase 8 — Celery reminders, escalation & scheduled jobs
 - Beat schedule per §11; reminder dispatch with `skip_locked`; escalation; auto-close on payment;

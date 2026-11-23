@@ -69,3 +69,20 @@ def check_razorpay(app_configs, **kwargs):
     if key_id.startswith("rzp_live_") and settings.DEBUG:
         errors.append(Error("Live Razorpay keys must not be used with DEBUG on.", id="core.E008"))
     return errors
+
+
+@register(Tags.security, deploy=False)
+def check_whatsapp(app_configs, **kwargs):
+    if getattr(settings, "WHATSAPP_GATEWAY", "") != "cloud_api":
+        return []
+    names = (
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "WHATSAPP_ACCESS_TOKEN",
+        "WHATSAPP_APP_SECRET",
+        "WHATSAPP_VERIFY_TOKEN",
+    )
+    return [
+        Error(f"{name} is required when WHATSAPP_GATEWAY=cloud_api.", id="core.E009")
+        for name in names
+        if not getattr(settings, name, "")
+    ]

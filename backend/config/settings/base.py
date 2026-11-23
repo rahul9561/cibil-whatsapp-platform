@@ -113,6 +113,14 @@ WHATSAPP_GATEWAY = env("WHATSAPP_GATEWAY", default="")
 RAZORPAY_KEY_ID = env("RAZORPAY_KEY_ID", default="")
 RAZORPAY_KEY_SECRET = env("RAZORPAY_KEY_SECRET", default="")
 RAZORPAY_WEBHOOK_SECRET = env("RAZORPAY_WEBHOOK_SECRET", default="")
+# WhatsApp Business Cloud API (Phase 7). Verify the Graph version against Meta's docs before go-live.
+WHATSAPP_GRAPH_VERSION = env("WHATSAPP_GRAPH_VERSION", default="v21.0")
+WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID", default="")
+WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", default="")
+WHATSAPP_APP_SECRET = env("WHATSAPP_APP_SECRET", default="")  # signs inbound webhooks (X-Hub-Signature-256)
+WHATSAPP_VERIFY_TOKEN = env("WHATSAPP_VERIFY_TOKEN", default="")  # echoed in the subscription handshake
+# Seconds an inbound message body may wait in Redis for the worker (it may be an OTP: keep this short).
+WHATSAPP_INBOUND_BODY_TTL = env.int("WHATSAPP_INBOUND_BODY_TTL", default=300)
 # Mock adapters are refused when DEBUG is off unless this is set explicitly (e.g. a staging demo).
 ALLOW_MOCK_ADAPTERS = env.bool("ALLOW_MOCK_ADAPTERS", default=False)
 
@@ -197,6 +205,8 @@ CELERY_TASK_ROUTES = {
     "reports.fetch_report": {"queue": "provider"},
     "reports.deliver_report": {"queue": "messaging"},
     "payments.process_webhook_event": {"queue": "webhooks"},
+    "conversations.*": {"queue": "webhooks"},
+    "messaging.*": {"queue": "webhooks"},
     "payments.*": {"queue": "payments"},
 }
 CELERY_BEAT_SCHEDULE: dict = {

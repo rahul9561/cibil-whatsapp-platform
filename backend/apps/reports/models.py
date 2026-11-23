@@ -43,7 +43,10 @@ class DeliveryStatus(models.TextChoices):
 TERMINAL_REPORT_STATUSES = frozenset(
     {ReportStatus.FAILED, ReportStatus.NO_HIT, ReportStatus.EXPIRED, ReportStatus.CANCELLED}
 )
-DELIVERED_STATUSES = frozenset({DeliveryStatus.DELIVERED, DeliveryStatus.READ})
+# Handed to WhatsApp counts as done: delivery receipts can be lost (or never come if the customer blocks us),
+# and a missing receipt must not lock the customer out of future requests. A later "failed" receipt still
+# marks delivery FAILED for staff retry (retry does not depend on the request being open).
+DELIVERED_STATUSES = frozenset({DeliveryStatus.SENT, DeliveryStatus.DELIVERED, DeliveryStatus.READ})
 
 _ABANDON = {ReportStatus.CANCELLED, ReportStatus.EXPIRED, ReportStatus.FAILED}
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
