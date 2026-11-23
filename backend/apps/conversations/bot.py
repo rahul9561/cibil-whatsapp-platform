@@ -50,6 +50,14 @@ SENSITIVE_STATES = {
 _REPLIES_KEY = "wa:replies:"
 
 
+START_WORDS = {"hi", "hii", "hello", "hey", "namaste", "start", "report", "cibil", "new", "yes", "menu"}
+
+
+def wants_new_report(text: str) -> bool:
+    words = (text or "").lower().replace("!", " ").replace(".", " ").replace("?", " ").split()
+    return bool(words) and (words[0] in START_WORDS or "report" in words)
+
+
 @dataclass
 class Reply:
     text: str
@@ -131,7 +139,19 @@ class Bot:
         else:
             self.resume(req)
 
-    on_new = on_ended = on_delivered = on_report_failed = on_no_hit = _idle
+    on_new = _idle  # first contact: any message starts
+
+    def _after_request(self, choice, reply_id):
+        """After a finished/cancelled/failed request, only a clear intent starts a new (paid) request.
+
+        "thank you" after receiving a report must not open a new purchase flow.
+        """
+        has_open = ReportRequest.objects.filter(active_lock=self.customer.pk).exists()
+        if has_open or wants_new_report(choice):
+            return self._idle(choice, reply_id)
+        self.say(t.IDLE_HINT)
+
+    on_ended = on_delivered = on_report_failed = on_no_hit = _after_request
 
     def start_details(self):
         c = self.customer
@@ -272,7 +292,7 @@ class Bot:
     def on_awaiting_otp(self, choice, reply_id):
         req = self.request
         if req is None or req.report_status != ReportStatus.OTP_SENT:
-            return self.resume(req) if req else self._idle(choice, reply_id)
+            return self.resume(req) if req else self._after_request(choice, reply_id)
         if (reply_id or choice.upper()) in {"resend", "RESEND"}:
             return self.request_otp()
         if not choice.isdigit():
@@ -302,13 +322,13 @@ class Bot:
     def on_fetching_report(self, choice, reply_id):
         req = self.request
         if req is not None and req.report_status not in {ReportStatus.OTP_VERIFIED, ReportStatus.FETCHING}:
-            return self.resume(req) if req.is_open else self._idle(choice, reply_id)
+            return self.resume(req) if req.is_open else self._after_request(choice, reply_id)
         self.say(t.STILL_FETCHING)
 
     def on_awaiting_payment(self, choice, reply_id):
         req = self.request
         if req is None or not req.is_open:
-            return self._idle(choice, reply_id)
+            return self._after_request(choice, reply_id)
         if req.payment_links.filter(status=PaymentLinkStatus.PAID).exists():
             return self.say(t.PAYMENT_RECEIVED)
         try:

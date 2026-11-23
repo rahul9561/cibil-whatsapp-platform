@@ -1,0 +1,126 @@
+# Production stack for a single Ubuntu VPS. See docs/RUNBOOK.md for first-time setup, deploys and rollback.
+#
+#   docker compose -f infrastructure/compose/docker-compose.prod.yml --env-file .env.prod build
+#   docker compose -f infrastructure/compose/docker-compose.prod.yml --env-file .env.prod run --rm migrate
+#   docker compose -f infrastructure/compose/docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Only nginx publishes ports. MySQL and Redis are reachable on the internal network only.
+name: cibil
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-backend: &backend
+  image: cibil-backend:${IMAGE_TAG:-latest}
+  env_file: ${ENV_FILE:-../../.env.prod}
+  environment:
+    DJANGO_SETTINGS_MODULE: config.settings.prod
+    PRIVATE_STORAGE_ROOT: /data/private/reports
+  volumes:
+    - private_reports:/data/private/reports
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+  logging: *logging
+
+services:
+  mysql:
+    image: mysql:8.4
+    env_file: ${ENV_FILE:-../../.env.prod}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-name-resolve
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    logging: *logging
+
+  redis:
+    image: redis:7.4-alpine
+    # Redis is the Celery broker and holds locks/OTP-bearing message bodies briefly: never evict, persist.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes",
+              "--maxmemory-policy", "noeviction"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    logging: *logging
+
+  web:
+    <<: *backend
+    build:
+      context: ../../backend
+      dockerfile: ../infrastructure/docker/backend.Dockerfile
+      args:
+        REQUIREMENTS: prod
+
+  worker:
+    <<: *backend
+    command: >
+      celery -A config worker -l info --concurrency ${CELERY_CONCURRENCY:-4} --max-tasks-per-child 200
+      -Q default,webhooks,provider,messaging,payments,reminders
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME --timeout 10"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+
+  beat:
+    <<: *backend
+    # Exactly one beat instance: never scale this service.
+    command: celery -A config beat -l info --schedule /tmp/celerybeat-schedule
+    healthcheck:
+      disable: true
+
+  # One-off: `docker compose ... run --rm migrate` before starting a new release.
+  migrate:
+    <<: *backend
+    command: python manage.py migrate --noinput
+    restart: "no"
+    profiles: ["tools"]
+
+  nginx:
+    image: cibil-frontend:${IMAGE_TAG:-latest}
+    build:
+      context: ../../frontend
+      dockerfile: ../infrastructure/docker/frontend.Dockerfile
+    environment:
+      DOMAIN: ${DOMAIN}
+      NGINX_ENVSUBST_FILTER: "^DOMAIN$$"
+    volumes:
+      - ../nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  mysql_data:
+  redis_data:
+  private_reports:

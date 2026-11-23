@@ -53,6 +53,15 @@ class PIIScrubFilter(logging.Filter):
                 setattr(record, key, REDACTED)
             elif isinstance(value, str):
                 setattr(record, key, scrub(value))
+            elif hasattr(value, "method") and hasattr(value, "path"):
+                # Django attaches the HttpRequest (e.g. django.request on 4xx/5xx); its repr includes the
+                # query string, which can carry search terms. Keep method + path only.
+                setattr(record, key, f"{value.method} {value.path}")
+                rid = getattr(value, "request_id", None)  # the context var is already reset by now
+                if rid and getattr(record, "request_id", "-") == "-":
+                    record.request_id = rid
+            elif not isinstance(value, int | float | bool | type(None)):
+                setattr(record, key, scrub(str(value)))  # anything else is rendered as text: scrub it now
         return True
 
 

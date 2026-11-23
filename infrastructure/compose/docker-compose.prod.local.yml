@@ -1,0 +1,12 @@
+# Local smoke test of the production stack (self-signed cert, high ports, mock adapters).
+#   docker compose -f infrastructure/compose/docker-compose.prod.yml -f infrastructure/compose/docker-compose.prod.local.yml \
+#     --env-file .env.prod.local up -d
+# Certificates: infrastructure/compose/local-certs/live/localhost/{fullchain,privkey}.pem (gitignored).
+services:
+  nginx:
+    volumes: !override
+      - ../nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./local-certs:/etc/letsencrypt:ro
+    ports: !override
+      - "127.0.0.1:8081:80"
+      - "127.0.0.1:8443:443"

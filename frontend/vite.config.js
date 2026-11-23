@@ -14,15 +14,10 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        // Separate, long-cached vendor chunks: app deploys don't invalidate React or the chart library.
-        manualChunks: {
-          react: ["react", "react-dom", "react-router-dom", "@tanstack/react-query"],
-          charts: ["recharts"],
-        },
-      },
-    },
+    // No manual chunking: the chart library is only reached through a lazy import (RevenueChart), so the
+    // bundler splits it into its own async chunk and roles that never see revenue never download it.
+    // (A manualChunks rule pulled react-dom into that chunk and made it load eagerly.)
+    chunkSizeWarningLimit: 600,
   },
   test: {
     environment: "jsdom",

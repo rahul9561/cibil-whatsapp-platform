@@ -107,11 +107,20 @@ inspected before any change, and nothing is overwritten without confirmation.
 - Implement the authorised partner's adapter strictly from its documentation; contract tests against its sandbox.
 - Can run in parallel with Phases 8–9 once documentation arrives.
 
-## Phase 11 — Production deployment
+## Phase 11 — Production deployment ✅ (staging deploy pending a VPS)
 - Prod Dockerfiles (multi-stage, non-root), `docker-compose.prod.yml`, Nginx + TLS, UFW,
   backups, log rotation, Sentry, runbook (`docs/RUNBOOK.md`), deployment checklist.
 - Security review: headers, secrets, dependency audit (`pip-audit`, `npm audit`), OWASP checks.
 - **Exit:** staging deploy on the VPS with test-mode keys; go-live checklist signed off.
+- Done: production images (non-root, static files baked in, tests run during the frontend build),
+  `docker-compose.prod.yml`, nginx with TLS, HSTS, CSP and rate limits, privacy-safe access logs (no query
+  strings), optional Sentry with PII stripping, Let's Encrypt bootstrap, encrypted + verified backups and a
+  restore script, `docs/RUNBOOK.md`, `docs/GO_LIVE_CHECKLIST.md`. Dependency audits clean (pip-audit, npm audit);
+  React Router 6 -> 7 and Vite 6 -> 8 / Vitest 2 -> 5 to clear advisories.
+- Verified locally with `docker-compose.prod.local.yml` (self-signed cert): HTTPS redirect and headers, rate
+  limiting, readiness hidden, non-root Gunicorn, `check --deploy`, worker/beat, backup -> restore round trip.
+- Found and fixed while checking: PII in access logs (nginx default log, Django request repr), customer search
+  terms in the browser URL, eager loading of the chart bundle, bot starting a new paid request on "thank you".
 
 ## Definition of done (every phase)
 1. Code + migrations reviewed against the architecture doc (doc updated if the design changed).

@@ -70,3 +70,15 @@ def test_json_formatter_output_is_scrubbed_and_has_request_id():
     assert data["request_id"] == "req-123"
     assert data["otp"] == REDACTED
     assert "111111" not in line
+
+
+def test_request_objects_are_reduced_to_method_and_path():
+    from django.test import RequestFactory
+
+    req = RequestFactory().get("/api/v1/customers", {"pan": "ABCDE1234F", "phone": "9876543210"})
+    record = _record("Forbidden: %s", req.path, request=req, status_code=403)
+    PIIScrubFilter().filter(record)
+    line = JSONFormatter().format(record)
+    assert record.request == "GET /api/v1/customers"
+    assert "ABCDE1234F" not in line and "9876543210" not in line
+    assert json.loads(line)["status_code"] == 403

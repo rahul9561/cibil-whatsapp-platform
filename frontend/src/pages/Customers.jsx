@@ -24,9 +24,10 @@ import { useList } from "../components/useList";
 
 export function Customers() {
   const navigate = useNavigate();
-  const list = useList("customers");
-  const [phone, setPhone] = useState(list.filters.phone || "");
-  const [pan, setPan] = useState(list.filters.pan || "");
+  const [search, setSearch] = useState({}); // kept out of the URL: it is personal data
+  const list = useList("customers", {}, search);
+  const [phone, setPhone] = useState("");
+  const [pan, setPan] = useState("");
   return (
     <>
       <PageHeader
@@ -38,7 +39,8 @@ export function Customers() {
           className="mb-3 flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            list.setFilters({ phone: phone.trim(), pan: pan.trim() });
+            setSearch({ phone: phone.trim(), pan: pan.trim() });
+            list.setPage(1);
           }}
         >
           <Field label="Phone">
@@ -53,7 +55,7 @@ export function Customers() {
             onClick={() => {
               setPhone("");
               setPan("");
-              list.setFilters({ phone: "", pan: "" });
+              setSearch({});
             }}
           >
             Clear

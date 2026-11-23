@@ -3,14 +3,16 @@ import { useSearchParams } from "react-router-dom";
 import { get } from "../api/client";
 
 // List state (filters + page) lives in the URL, so views are shareable and survive a refresh.
-export function useList(path, defaults = {}) {
+// `privateParams` (e.g. a phone number or PAN being searched) are sent with the request but never put in the
+// address bar, so personal data stays out of browser history and server access logs' referrers.
+export function useList(path, defaults = {}, privateParams = {}) {
   const [params, setParams] = useSearchParams();
   const filters = { ...defaults, ...Object.fromEntries(params.entries()) };
   const page = Number(filters.page || 1);
 
   const query = useQuery({
-    queryKey: [path, filters],
-    queryFn: () => get(path, filters),
+    queryKey: [path, filters, privateParams],
+    queryFn: () => get(path, { ...filters, ...privateParams }),
     placeholderData: (previous) => previous,
   });
 

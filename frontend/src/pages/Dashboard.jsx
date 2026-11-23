@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { buildUrl, get } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { label, rupees } from "../components/format";
@@ -17,6 +16,17 @@ import {
   Spinner,
   Stat,
 } from "../components/ui";
+
+// The chart library is large and only finance/admin roles see revenue: load it on demand.
+const LazyRevenueChart = lazy(() => import("../components/RevenueChart"));
+
+function RevenueChart(props) {
+  return (
+    <Suspense fallback={<Spinner text="Loading chart…" />}>
+      <LazyRevenueChart {...props} />
+    </Suspense>
+  );
+}
 
 const isoDay = (d) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 const daysAgo = (n) => isoDay(new Date(Date.now() - n * 86400000));
@@ -105,23 +115,6 @@ export function Dashboard() {
         )}
       </div>
     </>
-  );
-}
-
-function RevenueChart({ rows }) {
-  if (!rows.length) return <p className="text-sm text-slate-500">No payments in this period.</p>;
-  return (
-    <div className="h-56">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows.map((r) => ({ ...r, net: r.net_paise / 100 }))}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="period" fontSize={11} />
-          <YAxis fontSize={11} />
-          <Tooltip formatter={(v) => `₹${Number(v).toLocaleString("en-IN")}`} />
-          <Bar dataKey="net" fill="#2563eb" name="Net" />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
   );
 }
 

@@ -264,3 +264,38 @@ def test_after_delivery_customer_can_start_again():
     assert state() == S.DELIVERED
     r = say("hi")  # no delivery receipt has arrived (mock): must not be stuck on the old request
     assert "Welcome back" in texts(r) and ReportRequest.objects.count() == 2
+
+
+def test_thanks_after_delivery_does_not_start_a_new_request():
+    get_to_otp()
+    say("123456")
+    link = ReportRequest.objects.get().payment_links.get()
+    simulate_payment(link.razorpay_link_id)
+    confirm_payment_task.delay(link.razorpay_link_id)
+    for polite in ("thank you", "ok", "👍"):
+        assert "Send HI whenever" in texts(say(polite))
+    assert ReportRequest.objects.count() == 1 and state() == S.DELIVERED
+    assert "Welcome back" in texts(say("Hi!"))
+    assert ReportRequest.objects.count() == 2
+
+
+def test_first_contact_starts_on_any_message():
+    assert "full name" in texts(say("what is this?"))
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("hi", True),
+        ("Hello!", True),
+        ("new report please", True),
+        ("I want my report", True),
+        ("thanks", False),
+        ("ok", False),
+        ("", False),
+    ],
+)
+def test_wants_new_report(text, expected):
+    from apps.conversations.bot import wants_new_report
+
+    assert wants_new_report(text) is expected

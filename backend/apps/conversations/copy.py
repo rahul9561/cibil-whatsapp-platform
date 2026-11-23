@@ -89,3 +89,5 @@ REPORT_EXPIRED = (
     "Your report {ref} has expired because it wasn't paid for in time. You have not been charged. "
     "Send HI if you'd like a fresh report."
 )
+
+IDLE_HINT = "Thanks for your message! Send HI whenever you'd like a new credit report, or HELP for options."
