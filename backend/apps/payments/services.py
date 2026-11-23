@@ -142,6 +142,34 @@ class PaymentService:
         link.refresh_from_db()
         return msg
 
+    def sync_link(self, razorpay_link_id: str) -> PaymentLink | None:
+        """Used by webhooks and reconciliation. Returns None if the link is not ours."""
+        link = PaymentLink.objects.filter(razorpay_link_id=razorpay_link_id).first()
+        if link is None:
+            return None
+        if link.status == PaymentLinkStatus.PAID:
+            return link
+        state = self.gw.fetch_payment_link(razorpay_link_id)
+        if state.status == "paid":
+            return self.confirm_link_payment(razorpay_link_id)
+        final = {"expired": PaymentLinkStatus.EXPIRED, "cancelled": PaymentLinkStatus.CANCELLED}.get(
+            state.status
+        )
+        if final and link.status != final:
+            with transaction.atomic():
+                link = PaymentLink.objects.select_for_update().get(pk=link.pk)
+                if link.status != PaymentLinkStatus.PAID:
+                    previous = link.status
+                    link.status = final
+                    link.save(update_fields=["status"])
+                    audit.record(
+                        "payment_link.synced",
+                        actor_type=ActorType.SYSTEM,
+                        obj=link,
+                        changes={"from": previous, "to": final},
+                    )
+        return link
+
     # -- confirmation ------------------------------------------------------------------------------
 
     def confirm_link_payment(self, razorpay_link_id: str) -> PaymentLink:
@@ -275,28 +303,42 @@ class RefundService:
         return refund
 
     def process(self, refund_id):
-        """APPROVED -> PROCESSING -> PROCESSED at the gateway (idempotent per refund)."""
+        """APPROVED -> PROCESSING -> (PROCESSED now, or later via webhook). Safe to retry.
+
+        A retry after an ambiguous failure (timeout) first asks the gateway whether our refund already
+        exists, so a customer is never refunded twice.
+        """
         from .models import Refund, RefundStatus
 
         with transaction.atomic():
             refund = Refund.objects.select_for_update().select_related("payment").get(pk=refund_id)
-            if refund.status != RefundStatus.APPROVED:
-                return refund
-            refund.status = RefundStatus.PROCESSING
-            refund.save(update_fields=["status", "updated_at"])
+            if refund.status == RefundStatus.APPROVED:
+                refund.status = RefundStatus.PROCESSING
+                refund.save(update_fields=["status", "updated_at"])
+            elif refund.status != RefundStatus.PROCESSING or refund.razorpay_refund_id:
+                return refund  # done, failed, or already submitted (webhook will finish it)
+        payment_id, reference = refund.payment.razorpay_payment_id, str(refund.pk)
         try:
-            result = self.gw.create_refund(
-                refund.payment.razorpay_payment_id, refund.amount_paise, reference=str(refund.pk)
+            result = self.gw.find_refund(payment_id, reference) or self.gw.create_refund(
+                payment_id, refund.amount_paise, reference=reference
             )
         except PermanentError as exc:
             Refund.objects.filter(pk=refund.pk).update(status=RefundStatus.FAILED, failure_reason=exc.code)
             audit.record("refund.failed", actor_type=ActorType.SYSTEM, obj=refund, changes={"code": exc.code})
             raise
+        return self.apply_gateway_status(refund.pk, result.refund_id, result.status)
+
+    def apply_gateway_status(self, refund_pk, razorpay_refund_id: str, gateway_status: str):
+        """Record the gateway's view of a refund (from the API response or a refund.* webhook). Idempotent."""
+        from .models import Refund, RefundStatus
+
         with transaction.atomic():
-            refund = Refund.objects.select_for_update().get(pk=refund.pk)
-            payment = Payment.objects.select_for_update().get(pk=refund.payment_id)
-            refund.razorpay_refund_id = result.refund_id
-            if result.status == "processed":
+            refund = Refund.objects.select_for_update().get(pk=refund_pk)
+            if refund.status in {RefundStatus.PROCESSED, RefundStatus.FAILED}:
+                return refund
+            refund.razorpay_refund_id = refund.razorpay_refund_id or razorpay_refund_id
+            if gateway_status == "processed":
+                payment = Payment.objects.select_for_update().get(pk=refund.payment_id)
                 refund.status, refund.processed_at = RefundStatus.PROCESSED, timezone.now()
                 payment.amount_refunded_paise += refund.amount_paise
                 payment.status = (
@@ -305,11 +347,13 @@ class RefundService:
                     else PaymentStatus.PARTIALLY_REFUNDED
                 )
                 payment.save(update_fields=["amount_refunded_paise", "status", "updated_at"])
+            elif gateway_status == "failed":
+                refund.status, refund.failure_reason = RefundStatus.FAILED, "gateway_failed"
             refund.save()
             audit.record(
-                "refund.processed" if result.status == "processed" else "refund.submitted",
+                f"refund.{refund.status}",
                 actor_type=ActorType.SYSTEM,
                 obj=refund,
-                changes={"gateway_status": result.status},
+                changes={"gateway_status": gateway_status},
             )
         return refund

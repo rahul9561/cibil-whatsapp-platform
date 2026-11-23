@@ -3,8 +3,6 @@
 `simulate_payment(link_id, amount_paise=None)` plays the customer paying; tests and the dev tools use it.
 """
 
-import hashlib
-import hmac
 import secrets
 
 from django.core.cache import cache
@@ -95,9 +93,19 @@ class MockPaymentGateway(PaymentGateway):
             state["status"] = "cancelled"
             cache.set(_link_key(link_id), state, timeout=_TTL)
 
+    refund_status = "processed"  # tests set "pending" to exercise the webhook path
+
     def create_refund(self, payment_id, amount_paise, reference):
-        return RefundResult("rfnd_mock_" + secrets.token_hex(7), "processed")
+        result = RefundResult("rfnd_mock_" + secrets.token_hex(7), MockPaymentGateway.refund_status)
+        cache.set(f"mockpay:refund:{payment_id}:{reference}", result, timeout=_TTL)
+        return result
+
+    def find_refund(self, payment_id, reference):
+        return cache.get(f"mockpay:refund:{payment_id}:{reference}")
 
     def verify_webhook_signature(self, body: bytes, signature: str) -> bool:
-        expected = hmac.new(MOCK_WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
-        return hmac.compare_digest(expected, signature or "")
+        from django.conf import settings
+
+        from .razorpay_gateway import verify_signature
+
+        return verify_signature(body, signature, settings.RAZORPAY_WEBHOOK_SECRET or MOCK_WEBHOOK_SECRET)

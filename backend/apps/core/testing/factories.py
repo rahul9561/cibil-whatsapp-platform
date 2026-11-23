@@ -31,7 +31,8 @@ class CustomerFactory(factory.django.DjangoModelFactory):
 
     @factory.lazy_attribute_sequence
     def wa_id(self, n):  # set through set_wa_id below so the blind index is filled
-        return f"9198765{n:05d}"
+        # Always ends in 1: the WhatsApp mock treats numbers ending in 0000 as invalid recipients.
+        return f"919{n:06d}1"
 
     wa_id_hash = ""
 

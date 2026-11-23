@@ -109,6 +109,10 @@ REPORT_FILE_ENCRYPTION_KEYS = env.list("REPORT_FILE_ENCRYPTION_KEYS")
 CREDIT_PROVIDER = env("CREDIT_PROVIDER", default="")
 PAYMENT_GATEWAY = env("PAYMENT_GATEWAY", default="")
 WHATSAPP_GATEWAY = env("WHATSAPP_GATEWAY", default="")
+# Razorpay (Phase 6). Test-mode keys start with rzp_test_. Secrets only ever come from the environment.
+RAZORPAY_KEY_ID = env("RAZORPAY_KEY_ID", default="")
+RAZORPAY_KEY_SECRET = env("RAZORPAY_KEY_SECRET", default="")
+RAZORPAY_WEBHOOK_SECRET = env("RAZORPAY_WEBHOOK_SECRET", default="")
 # Mock adapters are refused when DEBUG is off unless this is set explicitly (e.g. a staging demo).
 ALLOW_MOCK_ADAPTERS = env.bool("ALLOW_MOCK_ADAPTERS", default=False)
 
@@ -192,9 +196,15 @@ CELERY_TASK_ROUTES = {
     "reports.initiate_otp": {"queue": "provider"},
     "reports.fetch_report": {"queue": "provider"},
     "reports.deliver_report": {"queue": "messaging"},
+    "payments.process_webhook_event": {"queue": "webhooks"},
     "payments.*": {"queue": "payments"},
 }
-CELERY_BEAT_SCHEDULE: dict = {}
+CELERY_BEAT_SCHEDULE: dict = {
+    # Catch payments whose webhook never arrived (ARCHITECTURE §6.1 step 5).
+    "reconcile-payment-links": {"task": "payments.reconcile_payment_links", "schedule": 10 * 60},
+    # Reprocess webhook events that failed (e.g. DB briefly unavailable).
+    "retry-failed-webhooks": {"task": "payments.retry_failed_webhook_events", "schedule": 5 * 60},
+}
 
 # --- Logging (JSON in prod, PII-scrubbed everywhere) ---
 LOG_LEVEL = env("LOG_LEVEL", default="INFO")

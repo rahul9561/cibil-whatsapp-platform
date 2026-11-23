@@ -280,6 +280,14 @@ Events handled: `payment_link.paid`, `payment_link.expired`, `payment_link.cance
 `payment.captured`, `payment.failed`, `refund.created`, `refund.processed`, `refund.failed`.
 (Event names to be re-checked against current Razorpay docs during Phase 6.)
 
+**Phase 6 notes (as built):** endpoint `POST /webhooks/razorpay` (`apps/payments/webhooks.py`). The stored
+payload is an allowlist of ids/amounts/statuses (no contact, e-mail, VPA, card or notes). Webhook bodies are
+treated as hints: processing always re-fetches the link from Razorpay (`PaymentService.sync_link`).
+Amount mismatches leave the event `FAILED` with `payment_mismatch` for staff review instead of retrying.
+Refunds are retry-safe: before creating a refund after an ambiguous failure, the gateway is searched for an
+existing refund carrying our reference (`notes.refund_ref`), so a timeout can never cause a double refund.
+`refund.processed` / `refund.failed` webhooks finish refunds that Razorpay reports as `pending`.
+
 ### 6.2 Duplicate report prevention
 - `ReportRequest.active_lock` is set to the customer id while the request is in a non-terminal state
   and to `NULL` when terminal; a **unique index on `active_lock`** gives "one active request per customer"

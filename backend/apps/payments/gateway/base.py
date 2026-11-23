@@ -79,4 +79,8 @@ class PaymentGateway(ABC):
     def create_refund(self, payment_id: str, amount_paise: int, reference: str) -> RefundResult: ...
 
     @abstractmethod
+    def find_refund(self, payment_id: str, reference: str) -> RefundResult | None:
+        """Look up a refund we may already have created (by our reference) before creating another."""
+
+    @abstractmethod
     def verify_webhook_signature(self, body: bytes, signature: str) -> bool: ...

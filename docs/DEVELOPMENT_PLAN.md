@@ -52,12 +52,19 @@ inspected before any change, and nothing is overwritten without confirmation.
   `/api/v1/docs` (staff only), exported to `docs/openapi.yaml`. Settings are read-only for now; editing them
   at runtime needs a DB-backed settings model (to schedule with the dashboard work).
 
-## Phase 6 — Razorpay integration
+## Phase 6 — Razorpay integration ✅ (code; live test-mode check pending keys)
 - Real `RazorpayGateway` using official SDK (test mode), payment-link creation/resend/cancel.
 - Webhook endpoint: raw-body signature check, `WebhookEvent` dedupe, async processing,
   amount/currency verification, reconciliation job, refunds (request → approve → process).
 - **Needs:** Razorpay test keys + webhook secret.
 - **Exit:** idempotency/replay/concurrency tests; manual test with Razorpay test mode.
+- Done: `RazorpayGateway` (official SDK, explicit timeouts), `POST /webhooks/razorpay`, event processing,
+  retry-safe refunds, reconciliation (every 10 min) and failed-webhook retry (every 5 min) in Celery beat.
+- **Still to do with real test keys:** set `PAYMENT_GATEWAY=razorpay` + the three `RAZORPAY_*` variables,
+  register the webhook URL in the Razorpay dashboard (events: `payment_link.paid`, `payment_link.expired`,
+  `payment_link.cancelled`, `refund.processed`, `refund.failed`) and run one real test-mode payment and
+  refund. Confirm the duplicate-`reference_id` error text and the payment-link list filter against the
+  current Razorpay docs at the same time.
 
 ## Phase 7 — WhatsApp integration & conversation bot
 - Real `CloudApiWhatsAppGateway`: text, interactive buttons, templates, media upload, documents.

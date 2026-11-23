@@ -4,7 +4,7 @@ from .base import PaymentGateway
 
 GATEWAYS = {
     "mock": "apps.payments.gateway.mock.MockPaymentGateway",
-    # "razorpay": added in Phase 6.
+    "razorpay": "apps.payments.gateway.razorpay_gateway.RazorpayGateway",
 }
 
 

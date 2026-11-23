@@ -55,3 +55,17 @@ def check_mock_adapters(app_configs, **kwargs):
             )
         ]
     return []
+
+
+@register(Tags.security, deploy=False)
+def check_razorpay(app_configs, **kwargs):
+    if getattr(settings, "PAYMENT_GATEWAY", "") != "razorpay":
+        return []
+    errors = []
+    for name in ("RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"):
+        if not getattr(settings, name, ""):
+            errors.append(Error(f"{name} is required when PAYMENT_GATEWAY=razorpay.", id="core.E007"))
+    key_id = getattr(settings, "RAZORPAY_KEY_ID", "")
+    if key_id.startswith("rzp_live_") and settings.DEBUG:
+        errors.append(Error("Live Razorpay keys must not be used with DEBUG on.", id="core.E008"))
+    return errors
