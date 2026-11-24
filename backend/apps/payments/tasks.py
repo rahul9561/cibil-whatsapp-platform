@@ -2,9 +2,12 @@ import logging
 from datetime import timedelta
 
 from celery import shared_task
+from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
+from apps.audit import service as audit
+from apps.audit.models import ActorType
 from apps.core.integrations import IntegrationError
 from apps.core.models import WebhookEvent, WebhookProcessingStatus
 from apps.core.tasks import run_with_retries
@@ -12,7 +15,7 @@ from apps.followups.services import FollowUpService
 from apps.reports.models import ReportRequest
 
 from .models import PaymentLink, PaymentLinkStatus, Refund
-from .services import PaymentService, RefundService
+from .services import LinkLookupFailed, PaymentService, RefundService
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +51,39 @@ def create_payment_link_task(self, request_id: str):
 
 @shared_task(bind=True, max_retries=8, name="payments.confirm_payment")
 def confirm_payment_task(self, razorpay_link_id: str):
-    """Sync one link with the gateway; if paid, close the follow-up and deliver."""
-    return run_with_retries(self, lambda: after_paid(PaymentService().sync_link(razorpay_link_id)))
+    """Sync one link with the gateway; if paid, close the follow-up and deliver.
+
+    If the gateway refuses the lookup, that is logged in one line instead of a traceback every
+    reconciliation run. If it says the link does not exist at all, the link can never be paid: it is
+    cancelled (audited) so reconciliation stops asking, and the next send creates a fresh link.
+    Other errors (amount mismatch, delivery failure) still raise.
+    """
+    try:
+        return run_with_retries(self, lambda: after_paid(PaymentService().sync_link(razorpay_link_id)))
+    except LinkLookupFailed as exc:
+        if exc.code == "link_not_found":
+            _cancel_missing_link(razorpay_link_id)
+        logger.warning("payment link %s not synced: %s", razorpay_link_id, exc.code)
+        return f"error:{exc.code}"
+
+
+def _cancel_missing_link(razorpay_link_id: str) -> None:
+    with transaction.atomic():
+        link = (
+            PaymentLink.objects.select_for_update()
+            .filter(razorpay_link_id=razorpay_link_id, status=PaymentLinkStatus.ACTIVE)
+            .first()
+        )
+        if link is None:
+            return
+        link.status = PaymentLinkStatus.CANCELLED
+        link.save(update_fields=["status"])
+        audit.record(
+            "payment_link.missing_at_gateway",
+            actor_type=ActorType.SYSTEM,
+            obj=link,
+            changes={"from": PaymentLinkStatus.ACTIVE, "to": PaymentLinkStatus.CANCELLED},
+        )
 
 
 @shared_task(bind=True, max_retries=6, name="payments.process_refund")

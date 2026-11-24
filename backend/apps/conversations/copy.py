@@ -119,3 +119,38 @@ PREFILL_UNAVAILABLE = "We couldn't look up your details right now, so please typ
 PREFILL_NOT_ME = "No problem, those details have been discarded. Please type your own details."
 BTN_ITS_ME = ("confirm", "Yes, that's me")
 BTN_NOT_ME = ("not_me", "No, not me")
+PREFILL_LIMIT = "You've reached today's limit for automatic look-ups, so please type your details."
+
+# Alternate mobile number: offered when nothing is found for the WhatsApp number, or the details found
+# belong to someone else. Details found for another number are only used after the customer types the
+# matching PAN, so nobody can see who a number belongs to.
+OWN_NUMBER_NOT_FOUND = (
+    "We couldn't find any credit details linked to this WhatsApp number ({mobile}).\n\n"
+    "Is your credit history linked to a different mobile number, for example the one registered with "
+    "your bank or loan?"
+)
+NOT_ME_OFFER_ALT = (
+    "No problem, those details have been discarded.\n\n"
+    "Is your credit history linked to a different mobile number?"
+)
+ASK_ALT_MOBILE = (
+    "Please send the other 10-digit mobile number.\n\n"
+    "Only send a number that is your own. By sending it, you allow us to use it to look up your details "
+    "and request your credit report."
+)
+INVALID_MOBILE = (
+    "That doesn't look like a valid Indian mobile number. Please send 10 digits, e.g. 98765 43210."
+)
+ALT_ALREADY_TRIED = "We've already checked that number. Please send a different one, or type your details."
+ALT_NOT_FOUND = "We couldn't find any credit details linked to {mobile} either."
+ALT_NO_MORE_TRIES = "Let's continue with your details instead. Please type them in."
+ALT_VERIFY_PAN = (
+    "We found details linked to {mobile}. To confirm they're yours, please type your PAN "
+    "(10 characters, e.g. ABCDE1234F)."
+)
+ALT_PAN_MISMATCH = (
+    "That PAN doesn't match the details linked to {mobile}, so we haven't used them. "
+    "Please type your own details."
+)
+TYPE_DETAILS = "Sure, please type your details."
+BTN_TYPE_DETAILS = ("type_details", "Type my details")

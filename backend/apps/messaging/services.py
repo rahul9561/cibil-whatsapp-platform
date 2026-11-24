@@ -1,5 +1,7 @@
 """Outbound WhatsApp messaging with the 24-hour window rule, opt-out and idempotency (ARCHITECTURE §5)."""
 
+import hashlib
+
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -11,11 +13,40 @@ from apps.core.redaction import scrub
 from .gateway import get_whatsapp
 from .gateway.base import Button, OutsideServiceWindow
 from .models import Direction, MessageLog, MessageStatus, MessageType
+from .templates import TemplateParamError, validate_params
 
 
 class CustomerOptedOut(PermanentError):
     def __init__(self):
         super().__init__("customer opted out of non-essential messages", code="customer_opted_out")
+
+
+class TemplateParamMismatch(PermanentError):
+    """Parameters don't fit the approved template: refused before a log row or a gateway call."""
+
+    def __init__(self, detail: str):
+        super().__init__(detail, code="template_param_mismatch")
+
+
+def checked_params(template_key: str, params) -> list[str]:
+    try:
+        return validate_params(template_key, params)
+    except TemplateParamError as exc:
+        raise TemplateParamMismatch(str(exc)) from exc
+
+
+IDEMPOTENCY_KEY_MAX = MessageLog._meta.get_field("idempotency_key").max_length
+
+
+def storable_key(key: str | None) -> str | None:
+    """Fit an idempotency key into the column. Real WhatsApp message ids ("wamid.HBgM…") are ~60 characters,
+    so keys built from them overflow. Long keys are replaced by a stable hash: the same input always maps to
+    the same key, so retries still find their row. Short keys are kept readable."""
+    if not key or len(key) <= IDEMPOTENCY_KEY_MAX:
+        return key
+    prefix = key.split(":", 1)[0][:12]
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    return f"{prefix}:h:{digest}"[:IDEMPOTENCY_KEY_MAX]
 
 
 def in_service_window(customer) -> bool:
@@ -31,6 +62,7 @@ class MessagingService:
 
     def _claim(self, customer, *, idempotency_key, msg_type, related_request, sent_by, template_name, body):
         """Return (log_row, already_sent). Re-running with the same key never sends twice."""
+        idempotency_key = storable_key(idempotency_key)
         if idempotency_key:
             existing = MessageLog.objects.filter(idempotency_key=idempotency_key).first()
             if existing and existing.status not in {MessageStatus.QUEUED, MessageStatus.FAILED}:
@@ -94,6 +126,8 @@ class MessagingService:
         """Free-form text inside the 24 h window, otherwise the approved template (if one is given)."""
         if is_reminder and customer.is_opted_out:
             raise CustomerOptedOut()
+        if template_key:  # validated even when free text wins, so a bad call site fails in tests too
+            template_params = checked_params(template_key, template_params)
         window = in_service_window(customer)
         if text and window:
             mode = "buttons" if buttons else "text"
@@ -127,7 +161,7 @@ class MessagingService:
         return self._dispatch(
             row,
             lambda: self.gw.send_template(
-                to, template_name, settings.WHATSAPP_TEMPLATE_LANGUAGE, [str(p) for p in template_params]
+                to, template_name, settings.WHATSAPP_TEMPLATE_LANGUAGE, template_params
             ),
         )
 
@@ -144,6 +178,7 @@ class MessagingService:
         sent_by=None,
     ) -> MessageLog:
         """Upload to WhatsApp media (no public URL) and send; template outside the 24 h window."""
+        template_params = checked_params("report_delivery", template_params)
         window = in_service_window(customer)
         template_name = "" if window else settings.WHATSAPP_TEMPLATES["report_delivery"]
         row, done = self._claim(
@@ -167,7 +202,7 @@ class MessagingService:
                 to,
                 template_name,
                 settings.WHATSAPP_TEMPLATE_LANGUAGE,
-                [str(p) for p in template_params],
+                template_params,
                 document_media_id=media_id,
                 document_filename=filename,
             ),

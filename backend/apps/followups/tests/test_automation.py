@@ -184,7 +184,12 @@ def test_unpaid_report_expires_with_link_followup_and_reminders():
     with freeze_time(T0) as clock:
         req = make_request()
         clock.tick(timedelta(days=settings.REPORT_VALIDITY_DAYS, minutes=1))
-        assert expire_stale_requests()["unpaid_expired"] == 1  # notice can't be sent: window closed, no crash
+        assert expire_stale_requests()["unpaid_expired"] == 1
+        sent = outbox()[-1]  # window closed days ago: the approved template carries the notice
+        assert (
+            sent["kind"] == "template" and sent["template"] == settings.WHATSAPP_TEMPLATES["report_expired"]
+        )
+        assert sent["params"] == [req.public_ref]
         req.refresh_from_db()
         assert req.report_status == ReportStatus.EXPIRED
         assert req.payment_links.get().status == PaymentLinkStatus.CANCELLED

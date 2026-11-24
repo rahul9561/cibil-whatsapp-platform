@@ -24,7 +24,11 @@ ABANDONABLE = [ReportStatus.DRAFT, ReportStatus.CONSENTED, ReportStatus.OTP_SENT
 FETCH_STUCK_AFTER = timedelta(minutes=10)
 
 
-def _reset_conversation(req: ReportRequest, message: str, key: str) -> None:
+def _reset_conversation(
+    req: ReportRequest, message: str, key: str, *, template_key: str | None = None, template_params=()
+) -> None:
+    """End the conversation and tell the customer. With a template the notice also reaches them outside
+    the 24 h window; without one it is only sent inside it (they see a fresh start when they next write)."""
     from apps.conversations.models import Conversation
     from apps.conversations.models import ConversationState as S
     from apps.messaging.services import MessagingService
@@ -34,9 +38,14 @@ def _reset_conversation(req: ReportRequest, message: str, key: str) -> None:
     )
     try:
         MessagingService().send(
-            req.customer, text=message, idempotency_key=f"notify:{req.pk}:{key}", related_request=req
+            req.customer,
+            text=message,
+            template_key=template_key,
+            template_params=template_params,
+            idempotency_key=f"notify:{req.pk}:{key}",
+            related_request=req,
         )
-    except IntegrationError as exc:  # outside the 24 h window: they'll see a fresh start when they write
+    except IntegrationError as exc:
         logger.info("expiry notice not sent: %s", exc.code)
 
 
@@ -94,7 +103,13 @@ def expire_stale_requests() -> dict:
             service.expire(req.pk, reason="unpaid")
         except InvalidTransition:
             continue
-        _reset_conversation(req, t.REPORT_EXPIRED.format(ref=req.public_ref), "expired")
+        _reset_conversation(
+            req,
+            t.REPORT_EXPIRED.format(ref=req.public_ref),
+            "expired",
+            template_key="report_expired",  # days after the last message: almost always outside the window
+            template_params=[req.public_ref],
+        )
         result["unpaid_expired"] += 1
 
     # 3. Self-healing: a fetch whose task was lost (worker crash, broker restart). Fetch is exactly-once,

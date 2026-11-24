@@ -9,6 +9,7 @@ task can never be overwritten by this handler's state. Replies are cached per me
 re-sends what is missing without re-running the bot (the text was already consumed).
 """
 
+import hmac
 import json
 import logging
 from dataclasses import dataclass, field
@@ -18,9 +19,11 @@ from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from apps.audit import service as audit
+from apps.audit.models import ActorType
 from apps.core.crypto import blind_index, decrypt_str, encrypt_str
 from apps.core.integrations import LockNotAcquired, PermanentError, TransientError, distributed_lock
-from apps.core.masking import mask_name, mask_pan
+from apps.core.masking import mask_name, mask_pan, mask_phone
 from apps.customers.models import WA_ID_PURPOSE, Customer, Gender
 from apps.messaging.gateway.base import Button
 from apps.messaging.inbound import take_body
@@ -30,12 +33,12 @@ from apps.payments.models import PaymentLinkStatus
 from apps.payments.services import PaymentService, format_rupees
 from apps.reports.models import InvalidTransition, ReportRequest, ReportStatus
 from apps.reports.providers.base import VerifyOutcome
-from apps.reports.services import OtpResendLimit, ReportService
+from apps.reports.services import OtpResendLimit, PrefillLimitReached, ReportService
 
 from . import copy as t
 from .models import Conversation
 from .models import ConversationState as S
-from .validators import clean_dob, clean_name, clean_pan
+from .validators import clean_dob, clean_mobile, clean_name, clean_pan
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,8 @@ SENSITIVE_STATES = {
     S.ASK_NAME: "[name]",
     S.ASK_PAN: "[PAN]",
     S.ASK_DOB: "[date of birth]",
+    S.ASK_ALT_MOBILE: "[mobile]",
+    S.VERIFY_ALT_PAN: "[PAN]",
     S.AWAITING_OTP: OTP_PLACEHOLDER,
     S.OTP_FAILED: OTP_PLACEHOLDER,
 }
@@ -66,14 +71,26 @@ def _pending_key(customer) -> str:
     return f"prefill-pending:{customer.pk}"
 
 
-def save_pending(customer, prefill) -> None:
-    data = {"full_name": prefill.full_name, "pan": prefill.pan, "gender": prefill.gender}
+def save_pending(customer, data: dict) -> None:
+    """Looked-up details wait here (encrypted, 30 min), never in the database, until the customer confirms.
+    Keys: full_name, pan, gender; for an alternate number also mobile and verified (PAN matched)."""
     cache.set(_pending_key(customer), encrypt_str(json.dumps(data)), timeout=PENDING_TTL)
 
 
 def load_pending(customer) -> dict | None:
     blob = cache.get(_pending_key(customer))
     return json.loads(decrypt_str(blob)) if blob else None
+
+
+def is_unverified_alternate(pending: dict | None) -> bool:
+    """Details found for a number the customer typed are hidden until they type the matching PAN."""
+    return bool(pending and pending.get("mobile") and not pending.get("verified"))
+
+
+# Alternate mobile numbers a customer may try per request (each lookup also counts toward
+# PREFILL_MAX_PER_DAY). Tried numbers are kept only as keyed hashes in the conversation context.
+ALT_MOBILE_MAX_TRIES = 2
+ALT_MOBILE_PURPOSE = "conversation.alt_mobile"
 
 
 def clear_pending(customer) -> None:
@@ -236,6 +253,8 @@ class Bot:
                 self.request_otp()
             elif self.conv.state == S.FETCHING_REPORT:
                 self.start_direct_fetch(req, t.STILL_FETCHING)
+            elif is_unverified_alternate(load_pending(self.customer)):
+                self.ask_alt_pan(mask_phone(load_pending(self.customer)["mobile"]))
             elif load_pending(self.customer):
                 self.prompt_confirm(pending=load_pending(self.customer))
             elif self.details_complete():
@@ -305,19 +324,23 @@ class Bot:
         else:
             self.say(t.CONFIRM_DETAILS.format(details="\n".join(lines)), t.BTN_CONFIRM, t.BTN_EDIT)
 
-    def run_prefill(self):
-        """After consent: look up the details linked to this number; fall back to asking on any problem."""
+    def run_prefill(self, mobile: str | None = None):
+        """After consent: look up the details linked to the WhatsApp number (or an alternate number the
+        customer sent). Nothing found -> offer another number; provider problem -> ask the customer."""
         try:
-            found = self.reports.prefill(self.request.pk)
+            found = self.reports.prefill(self.request.pk, mobile)
+        except PrefillLimitReached:
+            return self.type_details(t.PREFILL_LIMIT)
         except (TransientError, PermanentError, LockNotAcquired):
-            found, message = None, t.PREFILL_UNAVAILABLE
-        else:
-            message = t.PREFILL_NOT_FOUND
+            return self.type_details(t.PREFILL_UNAVAILABLE)
+        if mobile:
+            return self._alternate_result(mobile, found)
         if found is None:
-            self.say(message)
-            return self.ask_next_after(None)
-        save_pending(self.customer, found)
-        pending = load_pending(self.customer)
+            return self.offer_alt_mobile(t.OWN_NUMBER_NOT_FOUND.format(mobile=self.customer.masked_phone))
+        save_pending(self.customer, {"full_name": found.full_name, "pan": found.pan, "gender": found.gender})
+        self.show_pending(load_pending(self.customer))
+
+    def show_pending(self, pending: dict):
         missing = [f for f in ("full_name", "pan", "gender") if f in self.needed and not pending.get(f)]
         if missing:
             # Partial match: keep what was found and let the customer fill the gap (saved on confirm).
@@ -327,6 +350,66 @@ class Bot:
             return self._ask(missing[0])
         self.prompt_confirm(pending=pending)
 
+    def type_details(self, message: str = t.TYPE_DETAILS):
+        clear_pending(self.customer)
+        self.say(message)
+        self.ask_next_after(None)
+
+    # -- alternate mobile number ------------------------------------------------------------------------
+
+    def alt_tries_left(self) -> int:
+        return ALT_MOBILE_MAX_TRIES - len(self.conv.context.get("alt_tried", []))
+
+    def offer_alt_mobile(self, intro: str):
+        """Ask for another number (the customer can also choose to type their details instead)."""
+        if self.alt_tries_left() <= 0:
+            return self.type_details(f"{intro}\n\n{t.ALT_NO_MORE_TRIES}")
+        self.go(S.ASK_ALT_MOBILE)
+        self.say(f"{intro}\n\n{t.ASK_ALT_MOBILE}", t.BTN_TYPE_DETAILS)
+
+    def on_ask_alt_mobile(self, choice, reply_id):
+        if (reply_id or choice.lower()) in {"type_details", "type my details"}:
+            return self.type_details()
+        mobile = clean_mobile(choice)
+        if not mobile:
+            return self.say(t.INVALID_MOBILE, t.BTN_TYPE_DETAILS)
+        tried = list(self.conv.context.get("alt_tried", []))
+        marker = blind_index(mobile, ALT_MOBILE_PURPOSE)
+        if mobile == self.customer.wa_id or marker in tried:
+            return self.say(t.ALT_ALREADY_TRIED, t.BTN_TYPE_DETAILS)
+        self.conv.context = {**self.conv.context, "alt_tried": [*tried, marker]}
+        self.run_prefill(mobile)
+
+    def _alternate_result(self, mobile: str, found):
+        masked = mask_phone(mobile)
+        if found is None or not found.pan:  # without a PAN there is nothing to prove ownership with
+            return self.offer_alt_mobile(t.ALT_NOT_FOUND.format(mobile=masked))
+        pending = {"full_name": found.full_name, "pan": found.pan, "gender": found.gender}
+        save_pending(self.customer, {**pending, "mobile": mobile, "verified": False})
+        self.ask_alt_pan(masked)
+
+    def ask_alt_pan(self, masked_mobile: str):
+        # Nothing from the lookup is shown yet: a stranger's number must not reveal whose it is.
+        self.go(S.VERIFY_ALT_PAN)
+        self.say(t.ALT_VERIFY_PAN.format(mobile=masked_mobile), t.BTN_TYPE_DETAILS)
+
+    def on_verify_alt_pan(self, choice, reply_id):
+        if (reply_id or choice.lower()) in {"type_details", "type my details"}:
+            return self.type_details()
+        pending = load_pending(self.customer)
+        if not pending or not pending.get("mobile"):  # expired (30 min): start the typed route
+            return self.type_details(t.PREFILL_NOT_FOUND)
+        pan = clean_pan(choice)
+        if not pan:
+            return self.say(t.INVALID_PAN, t.BTN_TYPE_DETAILS)
+        if not hmac.compare_digest(pan, pending.get("pan") or ""):
+            # One chance only: retrying would let someone guess a PAN against the bureau's record.
+            audit.record("report.alternate_mobile_rejected", actor_type=ActorType.SYSTEM, obj=self.request)
+            return self.type_details(t.ALT_PAN_MISMATCH.format(mobile=mask_phone(pending["mobile"])))
+        pending["verified"] = True
+        save_pending(self.customer, pending)
+        self.show_pending(pending)
+
     def apply_pending(self, pending: dict):
         c = self.customer
         c.full_name = pending.get("full_name") or c.full_name
@@ -334,6 +417,8 @@ class Bot:
             c.set_pan(pending["pan"])
         c.gender = pending.get("gender") or c.gender
         c.save(update_fields=["full_name", "pan", "pan_hash", "gender", "updated_at"])
+        if pending.get("mobile") and pending.get("verified"):
+            self.reports.use_alternate_mobile(self.request.pk, pending["mobile"])
 
     def consent(self) -> tuple[str, str]:
         """(version, exact text) for the active provider: the OTP promise only appears when it is true."""
@@ -356,6 +441,8 @@ class Bot:
     def on_confirm_details(self, choice, reply_id):
         answer = choice.lower()
         pending = load_pending(self.customer)
+        if is_unverified_alternate(pending):
+            pending = None  # never confirmed without the PAN check
         req = self.request
         consented = bool(req and req.report_status == ReportStatus.CONSENTED)
         if answer in {"confirm", "yes", "y", "1", "yes, that's me"}:
@@ -369,6 +456,9 @@ class Bot:
             self.say(self.consent()[1], t.BTN_AGREE, t.BTN_DECLINE)
         elif answer in {"not_me", "no, not me"} or (pending and answer in {"edit", "no", "n", "2"}):
             clear_pending(self.customer)
+            from_whatsapp_number = pending is not None and not pending.get("mobile")
+            if from_whatsapp_number and consented and self.prefill_mode and self.alt_tries_left() > 0:
+                return self.offer_alt_mobile(t.NOT_ME_OFFER_ALT)  # e.g. a recycled number
             self.say(t.PREFILL_NOT_ME)
             self.ask_next_after(None)
         elif answer in {"edit", "no", "n", "2"}:

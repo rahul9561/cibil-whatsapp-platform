@@ -5,6 +5,8 @@ from pathlib import Path
 import environ
 from celery.schedules import crontab
 
+from apps.messaging.templates import default_names as _wa_template_names
+
 BASE_DIR = Path(__file__).resolve().parents[2]  # backend/
 REPO_ROOT = BASE_DIR.parent
 
@@ -161,11 +163,9 @@ PAN_GUARD_DAYS = env.int("PAN_GUARD_DAYS", default=30)
 STALE_REQUEST_MINUTES = env.int("STALE_REQUEST_MINUTES", default=60)  # unfinished details/consent/OTP
 WHATSAPP_TEMPLATE_LANGUAGE = env("WHATSAPP_TEMPLATE_LANGUAGE", default="en")
 # Logical name -> approved WhatsApp template name. Needed outside the 24-hour service window.
-WHATSAPP_TEMPLATES = {
-    "payment_link": env("WA_TEMPLATE_PAYMENT_LINK", default="payment_link_v1"),
-    "payment_reminder": env("WA_TEMPLATE_PAYMENT_REMINDER", default="payment_reminder_v1"),
-    "report_delivery": env("WA_TEMPLATE_REPORT_DELIVERY", default="report_delivery_v1"),
-}
+# Wording, parameters and defaults live in apps/messaging/templates.py; each name can be overridden by its
+# WA_TEMPLATE_* variable (payment_link, payment_reminder, report_delivery, report_expired).
+WHATSAPP_TEMPLATES = _wa_template_names(env)
 
 # --- Sessions / cookies (SPA uses session auth + CSRF, see ARCHITECTURE §6.6) ---
 SESSION_COOKIE_HTTPONLY = True

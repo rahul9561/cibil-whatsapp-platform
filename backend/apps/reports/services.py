@@ -41,6 +41,11 @@ class NotPaid(PermanentError):
         super().__init__("report has no verified payment", code="not_paid")
 
 
+class PrefillLimitReached(PermanentError):
+    def __init__(self):
+        super().__init__("daily prefill lookups used up", code="prefill_daily_limit")
+
+
 def _system(action, obj, **changes):
     audit.record(action, actor_type=ActorType.SYSTEM, obj=obj, changes=changes)
 
@@ -82,11 +87,13 @@ class ReportService:
         _system("report.started", req)
         return req, True
 
-    def prefill(self, request_id) -> Prefill | None:
-        """Look up name/PAN/gender for the customer's own WhatsApp number (only after consent).
+    def prefill(self, request_id, mobile: str | None = None) -> Prefill | None:
+        """Look up name/PAN/gender for a mobile number (only after consent).
 
-        Returns None when the provider has no prefill, the daily cap is reached, or nothing clear was found.
-        TransientError propagates so the caller can fall back to asking the customer.
+        `mobile` defaults to the customer's WhatsApp number; an alternate number is one the customer typed.
+        Returns None when the provider has no prefill or nothing clear was found. Raises PrefillLimitReached
+        past PREFILL_MAX_PER_DAY (all numbers count). TransientError propagates so the caller can fall back
+        to asking the customer.
         """
         req = ReportRequest.objects.select_related("customer").get(pk=request_id)
         if not req.consent_id:
@@ -102,15 +109,27 @@ class ReportService:
             count = 1
         if count > settings.PREFILL_MAX_PER_DAY:
             _system("report.prefill", req, outcome="daily_limit")
-            return None
-        result = self.provider.prefill_by_mobile(req.customer.wa_id, str(req.consent_id))
+            raise PrefillLimitReached()
+        alternate = bool(mobile) and mobile != req.customer.wa_id
+        result = self.provider.prefill_by_mobile(mobile or req.customer.wa_id, str(req.consent_id))
         _system(
             "report.prefill",
             req,
             outcome="found" if result else "not_found",
             pan_found=bool(result and result.pan),
+            alternate_mobile=alternate,
         )
         return result
+
+    def use_alternate_mobile(self, request_id, mobile: str) -> None:
+        """The customer proved an alternate number (matching PAN): the bureau gets that number."""
+        with transaction.atomic():
+            req = ReportRequest.objects.select_for_update().get(pk=request_id)
+            if req.report_status != ReportStatus.CONSENTED:
+                raise InvalidTransition(f"{req.public_ref}: mobile can't change in {req.report_status}")
+            req.applicant_mobile = mobile
+            req.save(update_fields=["applicant_mobile", "updated_at"])
+            _system("report.alternate_mobile", req, verified_by="pan_match")  # the number itself: encrypted
 
     def record_consent(
         self, request_id, *, text_version: str, text: str, wa_message_id: str = ""
@@ -135,12 +154,12 @@ class ReportService:
     # -- OTP -----------------------------------------------------------------------------------------
 
     @staticmethod
-    def _applicant(customer) -> Applicant:
+    def _applicant(customer, mobile: str = "") -> Applicant:
         return Applicant(
             full_name=customer.full_name,
             pan=customer.pan,
             dob=date.fromisoformat(customer.dob) if customer.dob else None,
-            mobile=customer.wa_id,
+            mobile=mobile or customer.wa_id,
             email=customer.email,
             pincode=customer.pincode,
             gender=customer.gender,
@@ -233,13 +252,14 @@ class ReportService:
                 elif req.report_status != ReportStatus.FETCHING:  # FETCHING = resume after crash/retry
                     raise InvalidTransition(f"{req.public_ref}: cannot fetch from {req.report_status}")
                 session_ref, consent_id, customer = req.provider_session_ref, req.consent_id, req.customer
+                mobile = req.applicant_mobile
 
             try:
                 if direct:
                     if not consent_id:
                         return self.mark_failed(request_id, "consent_missing")
                     result = self.provider.fetch_report_without_otp(
-                        self._applicant(customer), str(consent_id)
+                        self._applicant(customer, mobile), str(consent_id)
                     )
                 else:
                     result = self.provider.fetch_report(session_ref)

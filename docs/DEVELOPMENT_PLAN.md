@@ -76,9 +76,12 @@ inspected before any change, and nothing is overwritten without confirmation.
   customer copy in `apps/conversations/copy.py` (consent text is a draft for legal review), outcome
   notifications, and `manage.py whatsapp_simulate` for chatting with the bot locally.
 - **Still to do with Meta credentials:** create the WhatsApp app and test number, set the five `WHATSAPP_*`
-  variables, register `https://<domain>/webhooks/whatsapp` (field `messages`), submit the three templates
-  (`payment_link_v1`, `payment_reminder_v1`, `report_delivery_v1` with a document header) for approval,
-  and run one real conversation. Re-check the Graph API version and error codes at the same time.
+  variables, register `https://<domain>/webhooks/whatsapp` (field `messages`), submit the four templates
+  (`payment_link_v1`, `payment_reminder_v1`, `report_delivery_v1` with a document header, `report_expired_v1`)
+  with `backend/scripts/submit_whatsapp_templates.py --submit`, and run one real conversation. Re-check the
+  Graph API version and error codes at the same time.
+- Templates are defined once in `apps/messaging/templates.py` (wording, examples, parameter count); settings,
+  the parameter check in `MessagingService` and the submission script all read it.
 
 ## Phase 8 — Celery reminders, escalation & scheduled jobs ✅
 - Beat schedule per §11; reminder dispatch with `skip_locked`; escalation; auto-close on payment;
@@ -116,6 +119,12 @@ inspected before any change, and nothing is overwritten without confirmation.
   database) and shown masked for "Is this you?". "No, not me" discards them and the customer types details;
   no record / several PANs / provider down also fall back to typing. Everything else in the prefill response
   (addresses, e-mail, other IDs) is discarded. `PREFILL_BY_MOBILE`, `PREFILL_MAX_PER_DAY`.
+- Alternate mobile number: if nothing is found for the WhatsApp number, or the customer taps "No, not me",
+  the bot asks for another number (up to 2 per request, each counting toward `PREFILL_MAX_PER_DAY`). Nothing
+  from that lookup is shown until the customer types the matching PAN (one attempt; a mismatch falls back to
+  typing details), so a number can't be used to find out whose it is. The proven number is stored
+  encrypted on the request (`ReportRequest.applicant_mobile`) and sent to the bureau instead of the WhatsApp
+  number. "Type my details" is always offered.
 - To confirm with Surepass: the prefill "not found" response;  sandbox URL; accepted gender values; the response for "no credit history";
   whether timed-out calls are billed and can be looked up; whether an OTP/consent-verified variant exists.
 - Implement the authorised partner's adapter strictly from its documentation; contract tests against its sandbox.

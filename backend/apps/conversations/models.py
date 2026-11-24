@@ -19,6 +19,8 @@ class ConversationState(models.TextChoices):
     ASK_DOB = "ask_dob", "Asking date of birth"
     ASK_EXTRA = "ask_extra", "Asking provider-specific fields"
     CONFIRM_DETAILS = "confirm_details", "Confirming details"
+    ASK_ALT_MOBILE = "ask_alt_mobile", "Asking an alternate mobile number"
+    VERIFY_ALT_PAN = "verify_alt_pan", "Verifying PAN for an alternate number"
     AWAITING_CONSENT = "awaiting_consent", "Awaiting consent"
     OTP_REQUESTING = "otp_requesting", "Requesting OTP"
     AWAITING_OTP = "awaiting_otp", "Awaiting OTP"

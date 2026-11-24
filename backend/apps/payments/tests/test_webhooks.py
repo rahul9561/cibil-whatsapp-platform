@@ -251,3 +251,36 @@ def test_stuck_events_are_requeued(django_capture_on_commit_callbacks):
     assert ev.processing_status == WebhookProcessingStatus.PROCESSED
     req.refresh_from_db()
     assert req.delivery_status == DeliveryStatus.SENT
+
+
+def test_link_unknown_to_the_gateway_is_cancelled_once_not_retried_forever():
+    from django.core.cache import cache
+
+    from apps.payments.gateway.mock import _link_key
+    from apps.payments.tasks import confirm_payment_task
+
+    req = make_request()
+    link = req.payment_links.get()
+    link.__class__.objects.filter(pk=link.pk).update(created_at=timezone.now() - timedelta(minutes=10))
+    cache.delete(_link_key(link.razorpay_link_id))  # gateway has no record of it
+    assert confirm_payment_task.delay(link.razorpay_link_id).get() == "error:link_not_found"
+    link.refresh_from_db()
+    assert link.status == PaymentLinkStatus.CANCELLED
+    assert AuditLog.objects.filter(action="payment_link.missing_at_gateway").count() == 1
+    assert reconcile_payment_links.delay().get() == 0  # no longer polled every 10 minutes
+
+
+def test_other_permanent_errors_are_logged_without_changing_the_link(monkeypatch):
+    from apps.core.integrations import PermanentError
+    from apps.payments.tasks import confirm_payment_task
+
+    req = make_request()
+    link = req.payment_links.get()
+
+    def refuse(self, link_id):
+        raise PermanentError("bad key", code="razorpay_bad_request")
+
+    monkeypatch.setattr(MockPaymentGateway, "fetch_payment_link", refuse)
+    assert confirm_payment_task.delay(link.razorpay_link_id).get() == "error:razorpay_bad_request"
+    link.refresh_from_db()
+    assert link.status == PaymentLinkStatus.ACTIVE  # could be a key mix-up: never cancel a real link on it

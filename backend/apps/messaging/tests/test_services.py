@@ -25,7 +25,9 @@ def customer(last_inbound_hours_ago=None, **kw):
 
 def test_free_text_inside_window():
     c = customer(last_inbound_hours_ago=1)
-    row = MessagingService().send(c, text="Hello", template_key="payment_link", template_params=["x"])
+    row = MessagingService().send(
+        c, text="Hello", template_key="payment_link", template_params=["CR-1", "₹99", "https://rzp.io/i/x"]
+    )
     assert row.type == MessageType.TEXT and row.status == MessageStatus.SENT and row.wa_message_id
     assert outbox()[-1]["kind"] == "text"
 
@@ -33,12 +35,12 @@ def test_free_text_inside_window():
 def test_template_outside_window(settings):
     c = customer(last_inbound_hours_ago=25)
     row = MessagingService().send(
-        c, text="Hello", template_key="payment_link", template_params=["CR-1", "₹99"]
+        c, text="Hello", template_key="payment_link", template_params=["CR-1", "₹99", "https://rzp.io/i/x"]
     )
     assert (
         row.type == MessageType.TEMPLATE and row.template_name == settings.WHATSAPP_TEMPLATES["payment_link"]
     )
-    assert outbox()[-1]["params"] == ["CR-1", "₹99"]
+    assert outbox()[-1]["params"] == ["CR-1", "₹99", "https://rzp.io/i/x"]
 
 
 def test_free_text_outside_window_without_template_is_refused():
@@ -89,3 +91,19 @@ def test_body_is_stored_redacted():
     c = customer(last_inbound_hours_ago=1)
     row = MessagingService().send(c, text="PAN ABCDE1234F, call 9876543210")
     assert row.body_redacted == "PAN [PAN], call [PHONE]"
+
+
+def test_long_idempotency_keys_from_real_wamids_fit_and_stay_idempotent():
+    from apps.messaging.services import IDEMPOTENCY_KEY_MAX, storable_key
+
+    c = customer(last_inbound_hours_ago=1)
+    wamid = "wamid.HBgMOTE5ODc2NTQzMjEwFQIAEhggQTU0NkY1QjU5RjM3QTM3QzVEQzYyMTRDQkY2MzQ4MjgA"
+    key = f"reply:{wamid}:0"
+    assert len(key) > IDEMPOTENCY_KEY_MAX
+    first = MessagingService().send(c, text="Hello", idempotency_key=key)
+    again = MessagingService().send(c, text="Hello", idempotency_key=key)  # webhook redelivery
+    assert first.pk == again.pk and MessageLog.objects.count() == 1
+    assert first.idempotency_key == storable_key(key) and len(first.idempotency_key) == IDEMPOTENCY_KEY_MAX
+    assert first.idempotency_key.startswith("reply:h:")
+    assert storable_key(f"reply:{wamid}:1") != storable_key(key)  # second reply to the same message
+    assert storable_key("paylink:abc:1") == "paylink:abc:1"  # short keys unchanged

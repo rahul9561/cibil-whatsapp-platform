@@ -2261,6 +2261,11 @@ components:
       - password
     ManualMessageRequest:
       type: object
+      description: |-
+        Free text (inside the 24 h window) or a payment template.
+
+        Template parameters are never taken from the client: the server builds them from the customer's open
+        report (reference, price, payment link), so staff can't send a template with wrong or missing values.
       properties:
         text:
           type: string
@@ -2268,12 +2273,6 @@ components:
           maxLength: 4096
         template_key:
           $ref: '#/components/schemas/TemplateKeyEnum'
-        template_params:
-          type: array
-          items:
-            type: string
-            minLength: 1
-            maxLength: 500
     MessageLog:
       type: object
       properties:

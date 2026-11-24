@@ -47,6 +47,10 @@ the dev stack:
 docker compose -f infrastructure/compose/docker-compose.dev.yml --env-file .env exec -e DJANGO_SETTINGS_MODULE=config.settings.test web python -m pytest -p no:cacheprovider
 ```
 
+<!-- docker compose -f infrastructure/compose/docker-compose.dev.yml --env-file .env up -d mysql redis -->
+
+<!-- docker compose -f infrastructure/compose/docker-compose.dev.yml --env-file .env up -d --force-recreate web -->
+
 ## Admin dashboard (frontend/)
 
 ```bash

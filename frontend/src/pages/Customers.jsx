@@ -123,9 +123,8 @@ export function CustomerDetail() {
 
   const send = async (e) => {
     e.preventDefault();
-    const body = message.template_key
-      ? { template_key: message.template_key, template_params: c.open_request ? [c.open_request] : [] }
-      : { text: message.text };
+    // Template parameters (reference, price, payment link) are filled in by the server.
+    const body = message.template_key ? { template_key: message.template_key } : { text: message.text };
     if (await action.run(() => post(`customers/${id}/messages`, body)))
       setMessage({ text: "", template_key: "" });
   };
@@ -187,7 +186,7 @@ export function CustomerDetail() {
                 onChange={(e) => setMessage({ ...message, template_key: e.target.value })}
                 options={[
                   ["", "Free text (only within 24 h of their last message)"],
-                  ["payment_reminder", "Template: payment reminder"],
+                  ["payment_reminder", "Template: payment reminder (report ref, price and link added)"],
                 ]}
               />
               {!message.template_key && (

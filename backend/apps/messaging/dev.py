@@ -22,7 +22,7 @@ def simulate_inbound(
 
     wa_id = normalize_phone_in(wa_id)  # Meta always sends full international digits
     msg_type = msg_type or ("interactive" if reply_id else "text")
-    wamid = "wamid.sim_" + secrets.token_hex(8)
+    wamid = "wamid.sim_" + secrets.token_hex(26)  # as long as a real wamid (~60 chars), so length bugs show
     event = WebhookEvent.objects.create(
         source=WebhookSource.WHATSAPP,
         event_id=wamid,

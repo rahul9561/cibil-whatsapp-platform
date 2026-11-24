@@ -60,7 +60,7 @@ def test_customer_search_by_phone_and_pan_uses_blind_index():
 
 
 def test_manual_message_respects_the_24h_window():
-    req = make_request(generated=False)
+    req = make_request()
     admin, user = client_for(Role.ADMIN)
     url = f"/api/v1/customers/{req.customer_id}/messages"
     assert admin.post(url, {"text": "Hello"}, **J).status_code == 201
@@ -69,11 +69,64 @@ def test_manual_message_respects_the_24h_window():
     )
     resp = admin.post(url, {"text": "Hello"}, **J)
     assert resp.status_code == 422 and resp.json()["code"] == "outside_service_window"
-    assert (
-        admin.post(url, {"template_key": "payment_reminder", "template_params": ["CR-X"]}, **J).status_code
-        == 201
-    )
+    assert admin.post(url, {"template_key": "payment_reminder"}, **J).status_code == 201
     assert req.customer.messages.filter(sent_by=user).count() == 2
+
+
+def test_manual_template_parameters_are_built_by_the_server(settings):
+    """D2: staff choose only the template; reference, price and link come from the open report."""
+    from apps.messaging.gateway.mock import outbox
+    from apps.payments.services import format_rupees
+
+    req = make_request()
+    Conversation.objects.filter(customer=req.customer).update(
+        last_inbound_at=timezone.now() - timedelta(days=2)
+    )
+    admin, user = client_for(Role.ADMIN)
+    url = f"/api/v1/customers/{req.customer_id}/messages"
+    resp = admin.post(
+        url, {"template_key": "payment_reminder", "template_params": ["FAKE", "₹1", "https://evil"]}, **J
+    )
+    assert resp.status_code == 201
+    link = req.payment_links.get()  # the existing link is reused, not a second one created
+    sent = outbox()[-1]
+    assert sent["template"] == settings.WHATSAPP_TEMPLATES["payment_reminder"]
+    assert sent["params"] == [req.public_ref, format_rupees(link.amount_paise), link.short_url]
+    assert link.sent_count == 2  # first automatic send + this one
+
+    assert admin.post(url, {"template_key": "payment_link"}, **J).status_code == 201
+    assert outbox()[-1]["template"] == settings.WHATSAPP_TEMPLATES["payment_link"]
+    assert outbox()[-1]["params"][0] == req.public_ref
+
+
+def test_manual_template_without_a_payable_report_is_a_conflict():
+    req = make_request(generated=False)  # still collecting details: nothing to pay for
+    admin, _ = client_for(Role.ADMIN)
+    url = f"/api/v1/customers/{req.customer_id}/messages"
+    resp = admin.post(url, {"template_key": "payment_reminder"}, **J)
+    assert resp.status_code == 409
+    assert not req.customer.messages.filter(type="template").exists()
+    paid = make_request(paid=True, wa_id="919811100099")
+    resp = admin.post(f"/api/v1/customers/{paid.customer_id}/messages", {"template_key": "payment_link"}, **J)
+    assert resp.status_code == 409  # already paid: nothing awaiting payment
+
+
+def test_manual_reminder_respects_opt_out():
+    req = make_request()
+    req.customer.opted_out_at = timezone.now()
+    req.customer.save(update_fields=["opted_out_at"])
+    admin, _ = client_for(Role.ADMIN)
+    resp = admin.post(
+        f"/api/v1/customers/{req.customer_id}/messages", {"template_key": "payment_reminder"}, **J
+    )
+    assert resp.status_code == 422 and resp.json()["code"] == "customer_opted_out"
+
+
+def test_manual_message_rejects_text_and_template_together():
+    req = make_request()
+    admin, _ = client_for(Role.ADMIN)
+    url = f"/api/v1/customers/{req.customer_id}/messages"
+    assert admin.post(url, {"text": "Hi", "template_key": "payment_link"}, **J).status_code == 400
 
 
 # --- agent scoping ---------------------------------------------------------------------------------------

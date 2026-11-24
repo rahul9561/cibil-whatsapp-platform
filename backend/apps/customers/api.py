@@ -7,12 +7,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.audit import service as audit
-from apps.core.api import CapabilityMixin, agent_scope
+from apps.core.api import CapabilityMixin, Conflict, agent_scope
 from apps.core.masking import mask_email
 from apps.followups.models import FollowUpNote
 from apps.messaging.models import MessageLog
 from apps.messaging.services import MessagingService
-from apps.reports.models import ReportRequest
+from apps.payments.services import PaymentService
+from apps.reports.models import ReportRequest, ReportStatus
 
 from .models import Customer
 
@@ -61,15 +62,20 @@ class RevealSerializer(serializers.Serializer):
 
 
 class ManualMessageSerializer(serializers.Serializer):
+    """Free text (inside the 24 h window) or a payment template.
+
+    Template parameters are never taken from the client: the server builds them from the customer's open
+    report (reference, price, payment link), so staff can't send a template with wrong or missing values.
+    """
+
     text = serializers.CharField(max_length=4096, required=False)
     template_key = serializers.ChoiceField(choices=["payment_link", "payment_reminder"], required=False)
-    template_params = serializers.ListField(
-        child=serializers.CharField(max_length=500), required=False, default=list
-    )
 
     def validate(self, data):
         if not data.get("text") and not data.get("template_key"):
             raise serializers.ValidationError("Provide text (inside the 24 h window) or a template.")
+        if data.get("text") and data.get("template_key"):
+            raise serializers.ValidationError("Send either text or a template, not both.")
         return data
 
 
@@ -175,14 +181,13 @@ class CustomerViewSet(
         ser = ManualMessageSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
-        msg = MessagingService().send(
-            customer,
-            text=data.get("text"),
-            template_key=data.get("template_key"),
-            template_params=data["template_params"],
-            sent_by=request.user,
-            related_request=ReportRequest.objects.filter(active_lock=customer.pk).first(),
-        )
+        open_request = ReportRequest.objects.filter(active_lock=customer.pk).first()
+        if data.get("template_key"):
+            msg = self._send_payment_template(request, open_request, data["template_key"])
+        else:
+            msg = MessagingService().send(
+                customer, text=data["text"], sent_by=request.user, related_request=open_request
+            )
         audit.record(
             "message.sent_manually",
             request=request,
@@ -192,3 +197,12 @@ class CustomerViewSet(
         return Response(
             {"id": str(msg.pk), "status": msg.status, "type": msg.type}, status=status.HTTP_201_CREATED
         )
+
+    @staticmethod
+    def _send_payment_template(request, open_request, template_key):
+        """Reuse (or create) the payment link and send it exactly as the automatic flow does."""
+        if open_request is None or open_request.report_status != ReportStatus.GENERATED:
+            raise Conflict("This customer has no generated report awaiting payment.")
+        service = PaymentService()
+        link = service.get_or_create_link(open_request.pk, created_by=request.user)
+        return service.send_link(link, sent_by=request.user, is_reminder=template_key == "payment_reminder")

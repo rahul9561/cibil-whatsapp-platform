@@ -77,9 +77,12 @@ def test_not_me_discards_the_lookup_and_asks_for_own_details():
     say(wa, "hi")
     say(wa, button="agree")
     r = say(wa, button="not_me")
-    assert "discarded" in texts(r) and state(wa) == S.ASK_NAME
+    assert "discarded" in texts(r) and state(wa) == S.ASK_ALT_MOBILE  # maybe a recycled number
+    assert r[-1]["buttons"] == ["type_details"]
     assert cache.get(f"prefill-pending:{customer(wa).pk}") is None
     assert customer(wa).pan == ""
+    say(wa, button="type_details")
+    assert state(wa) == S.ASK_NAME
     say(wa, "Anita Desai")
     say(wa, "ABCDE1234F")
     say(wa, button="female")
@@ -90,17 +93,18 @@ def test_not_me_discards_the_lookup_and_asks_for_own_details():
     assert customer(wa).pan == "ABCDE1234F" and req.customer.consents.count() == 1
 
 
-@pytest.mark.parametrize(
-    ("wa", "message"),
-    [
-        ("919800012349", "couldn't find your details automatically"),  # no record
-        ("919800012348", "couldn't look up your details right now"),  # provider down
-    ],
-)
-def test_falls_back_to_typing_details(wa, message):
+@pytest.mark.parametrize("no_record", [True, False])
+def test_falls_back_to_typing_details(no_record):
+    wa = "919800012349" if no_record else "919800012348"  # 9 = no record, 8 = provider down
     say(wa, "hi")
     r = say(wa, button="agree")
-    assert message in texts(r) and state(wa) == S.ASK_NAME
+    if no_record:  # another number is offered first; the customer chooses to type instead
+        assert "couldn't find any credit details linked to this WhatsApp number" in texts(r)
+        assert state(wa) == S.ASK_ALT_MOBILE
+        r = say(wa, button="type_details")
+    else:  # provider down: another number wouldn't help
+        assert "couldn't look up your details right now" in texts(r)
+    assert state(wa) == S.ASK_NAME
     say(wa, "Vishal Rathore")
     say(wa, "EKRPR1234F")
     say(wa, button="male")
@@ -116,7 +120,7 @@ def test_daily_lookup_cap(settings):
     say(wa, "CANCEL")
     say(wa, "hi")
     r = say(wa, button="agree")
-    assert "couldn't find your details automatically" in texts(r)  # cap reached: asked to type instead
+    assert "today's limit" in texts(r) and state(wa) == S.ASK_NAME  # cap reached: asked to type instead
     assert AuditLog.objects.filter(action="report.prefill", changes__outcome="daily_limit").exists()
 
 

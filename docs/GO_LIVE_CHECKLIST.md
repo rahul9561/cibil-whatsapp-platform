@@ -21,11 +21,18 @@ Tick every item before real customers are let in. Items marked **(blocking)** ar
 - [ ] **(blocking)** Legal sign-off on prefill-by-mobile: the bureau's details for a number may belong to
       someone other than the WhatsApp user (recycled or shared numbers); masked "Is this you?" confirmation
       plus the PAN guard are the only checks.
+- [ ] **(blocking)** Legal sign-off on the alternate mobile number: when nothing is found for the WhatsApp
+      number (or the customer says "Not me"), they may send up to two other numbers. Details found for such
+      a number are used only after the customer types the matching PAN (one attempt), and the report is
+      then requested with that number. Confirm with Surepass that this use of a customer-supplied number is
+      allowed, and that the consent wording in `copy.ASK_ALT_MOBILE` is enough.
 - [ ] **(blocking)** Razorpay live keys (`rzp_live_…`); webhook registered with the five events; one real ₹1
       payment and refund done end to end.
 - [ ] **(blocking)** WhatsApp: verified business, production number, long-lived System User token, webhook
       subscribed to `messages`; templates `payment_link_v1`, `payment_reminder_v1`, `report_delivery_v1`
-      (document header) **approved**; one real conversation completed.
+      (document header) and `report_expired_v1` **approved** (submit with
+      `backend/scripts/submit_whatsapp_templates.py --submit`, check with `--status`); one real conversation
+      completed.
 - [ ] Re-checked against current vendor docs: Razorpay duplicate-`reference_id` error and link-list filter;
       WhatsApp Graph API version and error codes.
 

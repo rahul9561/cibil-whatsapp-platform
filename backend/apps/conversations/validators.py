@@ -31,6 +31,16 @@ def clean_pan(text: str) -> str | None:
     return pan if _PAN.match(pan) else None
 
 
+def clean_mobile(text: str) -> str | None:
+    """Indian mobile number -> '91XXXXXXXXXX' (WhatsApp's format). Accepts 10 digits, 0-prefixed or +91."""
+    digits = re.sub(r"\D", "", text or "")
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    return f"91{digits}" if re.fullmatch(r"[6-9]\d{9}", digits) else None
+
+
 def clean_dob(text: str, today: date | None = None) -> date | None:
     raw = (text or "").strip()
     for pattern in _DATE_FORMATS:

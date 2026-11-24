@@ -32,6 +32,13 @@ class NotPayable(PermanentError):
         super().__init__(f"report request is not payable: {reason}", code=f"not_payable_{reason}")
 
 
+class LinkLookupFailed(PermanentError):
+    """The gateway refused to tell us about a link (unknown link, wrong keys). Keeps the original code."""
+
+    def __init__(self, cause: PermanentError):
+        super().__init__(f"payment link lookup failed: {cause}", code=cause.code)
+
+
 class PaymentMismatch(PermanentError):
     def __init__(self, reason: str):
         super().__init__(f"gateway payment does not match our link: {reason}", code="payment_mismatch")
@@ -149,7 +156,10 @@ class PaymentService:
             return None
         if link.status == PaymentLinkStatus.PAID:
             return link
-        state = self.gw.fetch_payment_link(razorpay_link_id)
+        try:
+            state = self.gw.fetch_payment_link(razorpay_link_id)
+        except PermanentError as exc:
+            raise LinkLookupFailed(exc) from exc
         if state.status == "paid":
             return self.confirm_link_payment(razorpay_link_id)
         final = {"expired": PaymentLinkStatus.EXPIRED, "cancelled": PaymentLinkStatus.CANCELLED}.get(

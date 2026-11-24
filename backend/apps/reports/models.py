@@ -97,6 +97,9 @@ class ReportRequest(UUIDModel):
     provider_report_ref = models.CharField(max_length=128, blank=True)
     # Blind-index of the PAN the report was pulled for (misuse guard for providers without OTP).
     pan_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    # Mobile number sent to the bureau when it isn't the WhatsApp number (the customer gave an alternate
+    # number and proved it with a matching PAN). Empty = the customer's WhatsApp number.
+    applicant_mobile = EncryptedTextField(blank=True, default="")
 
     # OTP bookkeeping only. The OTP itself is never stored anywhere (ARCHITECTURE §6.5).
     otp_attempts = models.PositiveSmallIntegerField(default=0)
