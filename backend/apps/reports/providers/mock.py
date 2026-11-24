@@ -122,3 +122,25 @@ class MockCreditReportProvider(CreditReportProvider):
         return ReportResult(
             ReportOutcome.SUCCESS, report_ref=f"rpt_{session_ref}", pdf_bytes=mock_pdf("750"), score="750"
         )
+
+
+class MockDirectCreditReportProvider(MockCreditReportProvider):
+    """Behaves like Surepass: no OTP, needs name/PAN/gender. Same PAN scenarios as the OTP mock."""
+
+    name = "mock_no_otp"
+    requires_otp = False
+    required_fields = frozenset({"full_name", "pan", "gender"})
+
+    def fetch_report_without_otp(self, applicant: Applicant, consent_ref: str) -> ReportResult:
+        if applicant.pan == "REJEC0000R":
+            raise PermanentError("applicant rejected by provider", code="applicant_rejected")
+        session_ref = f"direct_{consent_ref}"
+        state = cache.get(self._key(session_ref)) or {
+            "pan": applicant.pan,
+            "verified": True,
+            "bad": 0,
+            "fetches": 0,
+            "expires": "",
+        }
+        self._put(session_ref, state)
+        return self.fetch_report(session_ref)

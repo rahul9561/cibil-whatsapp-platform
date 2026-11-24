@@ -108,7 +108,7 @@ class ReportService:
         return Applicant(
             full_name=customer.full_name,
             pan=customer.pan,
-            dob=date.fromisoformat(customer.dob),
+            dob=date.fromisoformat(customer.dob) if customer.dob else None,
             mobile=customer.wa_id,
             email=customer.email,
             pincode=customer.pincode,
@@ -186,15 +186,32 @@ class ReportService:
                 req = ReportRequest.objects.select_for_update().get(pk=request_id)
                 if req.report_status in {ReportStatus.GENERATED, ReportStatus.NO_HIT, ReportStatus.FAILED}:
                     return req.report_status  # already done: idempotent
-                if req.report_status == ReportStatus.OTP_VERIFIED:
+                direct = not self.provider.requires_otp
+                claimable = ReportStatus.CONSENTED if direct else ReportStatus.OTP_VERIFIED
+                if req.report_status == claimable:
+                    blocked = self._pan_guard(req) if direct else ""
+                    if blocked:
+                        req.transition_to(ReportStatus.FAILED, failure_code=blocked)
+                        req.save()
+                        _system("report.blocked", req, code=blocked)
+                        return ReportStatus.FAILED
                     req.transition_to(ReportStatus.FETCHING)  # claim: no second fetch can start
+                    req.provider_name = self.provider.name
+                    req.pan_hash = req.customer.pan_hash
                     req.save()
                 elif req.report_status != ReportStatus.FETCHING:  # FETCHING = resume after crash/retry
                     raise InvalidTransition(f"{req.public_ref}: cannot fetch from {req.report_status}")
-                session_ref = req.provider_session_ref
+                session_ref, consent_id, customer = req.provider_session_ref, req.consent_id, req.customer
 
             try:
-                result = self.provider.fetch_report(session_ref)
+                if direct:
+                    if not consent_id:
+                        return self.mark_failed(request_id, "consent_missing")
+                    result = self.provider.fetch_report_without_otp(
+                        self._applicant(customer), str(consent_id)
+                    )
+                else:
+                    result = self.provider.fetch_report(session_ref)
             except PermanentError as exc:
                 return self.mark_failed(request_id, exc.code)
 
@@ -228,6 +245,31 @@ class ReportService:
                 )
                 _system("report.generated", req, size_bytes=stored.size_bytes)
         return ReportStatus.GENERATED
+
+    @staticmethod
+    def _pan_guard(req: ReportRequest) -> str:
+        """Misuse guard for providers that don't verify PAN ownership (no OTP). Returns a failure code or "".
+
+        Blocks, within PAN_GUARD_DAYS: (a) a PAN already reported for a *different* WhatsApp number, and
+        (b) a WhatsApp number that already got a report for a *different* PAN. Stops one number from
+        pulling many people's reports, and stops a PAN being pulled from several numbers.
+        """
+        days = settings.PAN_GUARD_DAYS
+        pan_hash = req.customer.pan_hash
+        if days <= 0 or not pan_hash:
+            return ""
+        since = timezone.now() - timedelta(days=days)
+        recent = ReportRequest.objects.filter(generated_at__gte=since).exclude(pk=req.pk)
+        if recent.filter(pan_hash=pan_hash).exclude(customer_id=req.customer_id).exists():
+            return "pan_used_by_other_number"
+        if (
+            recent.filter(customer_id=req.customer_id)
+            .exclude(pan_hash=pan_hash)
+            .exclude(pan_hash="")
+            .exists()
+        ):
+            return "number_used_for_other_pan"
+        return ""
 
     def mark_failed(self, request_id, code: str, detail: str = "") -> str:
         with transaction.atomic():

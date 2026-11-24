@@ -153,21 +153,51 @@ class Bot:
 
     on_ended = on_delivered = on_report_failed = on_no_hit = _after_request
 
+    # Customer details in the order they are asked; only the provider's required fields are asked.
+    FIELD_STEPS = (
+        ("full_name", S.ASK_NAME, t.ASK_NAME),
+        ("pan", S.ASK_PAN, t.ASK_PAN),
+        ("dob", S.ASK_DOB, t.ASK_DOB),
+        ("gender", S.ASK_EXTRA, t.ASK_GENDER),
+    )
+
+    @property
+    def needed(self) -> frozenset[str]:
+        return self.reports.provider.required_fields
+
+    def _ask(self, field: str):
+        for name, state, prompt in self.FIELD_STEPS:
+            if name == field:
+                self.go(state)
+                buttons = (t.BTN_MALE, t.BTN_FEMALE) if name == "gender" else ()
+                return self.say(prompt, *buttons)
+        return None
+
+    def ask_next_after(self, field: str | None):
+        """Ask the next required field after `field` (None = from the start), else confirm."""
+        names = [name for name, _, _ in self.FIELD_STEPS if name in self.needed]
+        later = names[names.index(field) + 1 :] if field in names else names
+        if later:
+            return self._ask(later[0])
+        return self.prompt_confirm()
+
     def start_details(self):
         c = self.customer
-        if c.full_name and c.pan and c.dob:
+        if all(getattr(c, f) for f in self.needed):
             self.say(t.SAVED_DETAILS)
             self.prompt_confirm()
         else:
-            self.go(S.ASK_NAME)
-            self.say(t.ASK_NAME)
+            self.ask_next_after(None)
 
     def resume(self, req: ReportRequest):
         status = req.report_status
         if status == ReportStatus.DRAFT:
             self.start_details()
         elif status == ReportStatus.CONSENTED:
-            self.request_otp()
+            if self.reports.provider.requires_otp:
+                self.request_otp()
+            else:
+                self.start_direct_fetch(req, t.STILL_FETCHING)
         elif status == ReportStatus.OTP_SENT:
             self.go(S.AWAITING_OTP)
             self.say(t.OTP_SENT.format(destination=""), t.BTN_RESEND)
@@ -189,8 +219,7 @@ class Bot:
             return self.say(t.INVALID_NAME)
         self.customer.full_name = name
         self.customer.save(update_fields=["full_name", "updated_at"])
-        self.go(S.ASK_PAN)
-        self.say(t.ASK_PAN)
+        self.ask_next_after("full_name")
 
     def on_ask_pan(self, choice, reply_id):
         pan = clean_pan(choice)
@@ -198,8 +227,7 @@ class Bot:
             return self.say(t.INVALID_PAN)
         self.customer.set_pan(pan)
         self.customer.save(update_fields=["pan", "pan_hash", "updated_at"])
-        self.go(S.ASK_DOB)
-        self.say(t.ASK_DOB)
+        self.ask_next_after("pan")
 
     def on_ask_dob(self, choice, reply_id):
         dob = clean_dob(choice)
@@ -207,36 +235,46 @@ class Bot:
             return self.say(t.INVALID_DOB)
         self.customer.dob = dob.isoformat()
         self.customer.save(update_fields=["dob", "updated_at"])
-        self.prompt_confirm()
+        self.ask_next_after("dob")
 
-    def on_ask_extra(self, choice, reply_id):  # reserved for provider-specific fields (Phase 10)
-        self.prompt_confirm()
+    def on_ask_extra(self, choice, reply_id):  # gender (asked only when the provider needs it)
+        gender = {"male": "M", "m": "M", "female": "F", "f": "F"}.get((reply_id or choice).strip().lower())
+        if not gender:
+            return self.say(t.INVALID_GENDER, t.BTN_MALE, t.BTN_FEMALE)
+        self.customer.gender = gender
+        self.customer.save(update_fields=["gender", "updated_at"])
+        self.ask_next_after("gender")
 
     def prompt_confirm(self):
         c = self.customer
-        dob = c.dob[8:10] + "-" + c.dob[5:7] + "-****" if c.dob else ""
+        lines = [f"Name: {mask_name(c.full_name)}", f"PAN: {mask_pan(c.pan)}"]
+        if "dob" in self.needed and c.dob:
+            lines.append(f"Date of birth: {c.dob[8:10]}-{c.dob[5:7]}-****")
+        if "gender" in self.needed and c.gender:
+            lines.append(f"Gender: {c.get_gender_display()}")
         self.go(S.CONFIRM_DETAILS)
-        self.say(
-            t.CONFIRM_DETAILS.format(name=mask_name(c.full_name), pan=mask_pan(c.pan), dob=dob),
-            t.BTN_CONFIRM,
-            t.BTN_EDIT,
+        self.say(t.CONFIRM_DETAILS.format(details="\n".join(lines)), t.BTN_CONFIRM, t.BTN_EDIT)
+
+    def consent(self) -> tuple[str, str]:
+        """(version, exact text) for the active provider: the OTP promise only appears when it is true."""
+        direct = not self.reports.provider.requires_otp
+        verification = (
+            t.CONSENT_DIRECT_LINE.format(mobile=self.customer.masked_phone) if direct else t.CONSENT_OTP_LINE
         )
+        text = t.CONSENT_TEXT.format(
+            verification=verification,
+            price=format_rupees(settings.REPORT_PRICE_PAISE),
+            retention=settings.REPORT_PDF_RETENTION_DAYS,
+        )
+        return f"{t.CONSENT_VERSION}-{'direct' if direct else 'otp'}", text
 
     def on_confirm_details(self, choice, reply_id):
         answer = choice.lower()
         if answer in {"confirm", "yes", "y", "1"}:
             self.go(S.AWAITING_CONSENT)
-            self.say(
-                t.CONSENT_TEXT.format(
-                    price=format_rupees(settings.REPORT_PRICE_PAISE),
-                    retention=settings.REPORT_PDF_RETENTION_DAYS,
-                ),
-                t.BTN_AGREE,
-                t.BTN_DECLINE,
-            )
+            self.say(self.consent()[1], t.BTN_AGREE, t.BTN_DECLINE)
         elif answer in {"edit", "no", "n", "2"}:
-            self.go(S.ASK_NAME)
-            self.say(t.ASK_NAME)
+            self.ask_next_after(None)
         else:
             self.say(t.PLEASE_CHOOSE, t.BTN_CONFIRM, t.BTN_EDIT)
 
@@ -245,13 +283,14 @@ class Bot:
     def on_awaiting_consent(self, choice, reply_id):
         answer = choice.lower()
         if answer in {"agree", "yes", "i agree", "y"}:
-            text = t.CONSENT_TEXT.format(
-                price=format_rupees(settings.REPORT_PRICE_PAISE), retention=settings.REPORT_PDF_RETENTION_DAYS
-            )
+            version, text = self.consent()
             self.reports.record_consent(
-                self.request.pk, text_version=t.CONSENT_VERSION, text=text, wa_message_id=self.wa_message_id
+                self.request.pk, text_version=version, text=text, wa_message_id=self.wa_message_id
             )
-            self.request_otp()
+            if self.reports.provider.requires_otp:
+                self.request_otp()
+            else:
+                self.start_direct_fetch(self.request, t.FETCHING_DIRECT)
         elif answer in {"decline", "no", "n", "no, thanks"}:
             req = self.request
             if req is not None and req.is_open:
@@ -261,6 +300,14 @@ class Bot:
             self.say(t.DECLINED)
         else:
             self.say(t.PLEASE_CHOOSE, t.BTN_AGREE, t.BTN_DECLINE)
+
+    def start_direct_fetch(self, req: ReportRequest, message: str):
+        """Providers without OTP: the report is requested as soon as consent is recorded."""
+        from apps.reports.tasks import fetch_report_task
+
+        self.go(S.FETCHING_REPORT)
+        self.say(message)
+        self.effects.append(lambda pk=str(req.pk): fetch_report_task.delay(pk))
 
     def request_otp(self):
         req = self.request

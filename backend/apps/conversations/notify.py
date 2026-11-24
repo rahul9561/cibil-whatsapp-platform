@@ -44,7 +44,13 @@ def report_outcome(request_id) -> None:
         _tell(req, t.NO_HIT, "no_hit")
     elif req.report_status == ReportStatus.FAILED:
         _move(req, waiting, S.REPORT_FAILED)
-        _tell(req, t.REJECTED if req.failure_code == "applicant_rejected" else t.REPORT_FAILED, "failed")
+        if req.failure_code in {"pan_used_by_other_number", "number_used_for_other_pan"}:
+            message = t.PAN_BLOCKED
+        elif req.failure_code == "applicant_rejected":
+            message = t.REJECTED
+        else:
+            message = t.REPORT_FAILED
+        _tell(req, message, "failed")
 
 
 def report_delivered(request_id) -> None:

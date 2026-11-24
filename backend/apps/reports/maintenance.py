@@ -53,8 +53,13 @@ def expire_stale_requests() -> dict:
 
     # 1. Abandoned while collecting details / consent / OTP. The report status doesn't move while the
     #    customer types their details, so the conversation's last message counts as activity too.
+    #    For providers without OTP a CONSENTED request is waiting for the fetch, not for the customer.
+    from .providers import get_provider
+
+    direct = not get_provider().requires_otp
+    abandonable = [s for s in ABANDONABLE if not (direct and s == ReportStatus.CONSENTED)]
     for req in ReportRequest.objects.filter(
-        report_status__in=ABANDONABLE, status_changed_at__lt=stale_before
+        report_status__in=abandonable, status_changed_at__lt=stale_before
     ):
         last_seen = (
             Conversation.objects.filter(customer_id=req.customer_id)
@@ -85,7 +90,8 @@ def expire_stale_requests() -> dict:
     # 3. Self-healing: a fetch whose task was lost (worker crash, broker restart). Fetch is exactly-once,
     #    so restarting it is safe: it resumes from FETCHING instead of pulling a second report.
     stuck = ReportRequest.objects.filter(
-        report_status__in=[ReportStatus.OTP_VERIFIED, ReportStatus.FETCHING],
+        report_status__in=[ReportStatus.OTP_VERIFIED, ReportStatus.FETCHING]
+        + ([ReportStatus.CONSENTED] if direct else []),
         status_changed_at__lt=now - FETCH_STUCK_AFTER,
     )
     for pk in stuck.values_list("pk", flat=True)[:100]:

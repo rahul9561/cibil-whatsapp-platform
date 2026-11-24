@@ -30,7 +30,11 @@ class Command(BaseCommand):
         parser.add_argument("--demo-data", action="store_true")
 
     def handle(self, *args, demo_data, **options):
-        if not settings.DEBUG or settings.CREDIT_PROVIDER != "mock" or settings.PAYMENT_GATEWAY != "mock":
+        if (
+            not settings.DEBUG
+            or not settings.CREDIT_PROVIDER.startswith("mock")
+            or settings.PAYMENT_GATEWAY != "mock"
+        ):
             raise CommandError("seed_dev_staff only runs with DEBUG on and mock adapters.")
         User = get_user_model()
         for email, role in DEV_STAFF:

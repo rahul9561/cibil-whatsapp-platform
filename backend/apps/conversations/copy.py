@@ -10,7 +10,7 @@ CONSENT_TEXT = (
     "Before we continue, please read and confirm:\n\n"
     "1. You authorise us to obtain YOUR credit report from an authorised credit information company "
     "through our licensed partner, only to share it with you.\n"
-    "2. The credit bureau will send a one-time password (OTP) to the mobile number registered with it.\n"
+    "2. {verification}\n"
     "3. The report fee of {price} is payable only after your report is ready.\n"
     "4. Your details are stored encrypted and the report file is deleted after {retention} days.\n"
     "5. You can withdraw consent any time by replying CANCEL, and stop messages with STOP.\n\n"
@@ -21,9 +21,7 @@ WELCOME = "Hello! I can get your CIBIL credit report on WhatsApp. It takes about
 ASK_NAME = "Please type your full name exactly as on your PAN card."
 ASK_PAN = "Thanks. Now please type your 10-character PAN (for example ABCDE1234F)."
 ASK_DOB = "Please type your date of birth as DD-MM-YYYY (for example 15-01-1990)."
-CONFIRM_DETAILS = (
-    "Please check your details:\n\nName: {name}\nPAN: {pan}\nDate of birth: {dob}\n\nIs this correct?"
-)
+CONFIRM_DETAILS = "Please check your details:\n\n{details}\n\nIs this correct?"
 SAVED_DETAILS = "Welcome back! We have your details from last time."
 
 INVALID_NAME = "That doesn't look like a name. Please use letters only (2 to 100 characters)."
@@ -91,3 +89,21 @@ REPORT_EXPIRED = (
 )
 
 IDLE_HINT = "Thanks for your message! Send HI whenever you'd like a new credit report, or HELP for options."
+
+# Line 2 of the consent text depends on how the provider verifies the customer.
+CONSENT_OTP_LINE = (
+    "The credit bureau will send a one-time password (OTP) to the mobile number registered with it."
+)
+CONSENT_DIRECT_LINE = (
+    "Your report will be requested using the details above and this WhatsApp number ({mobile}). "
+    "Only request a report for your own PAN."
+)
+ASK_GENDER = "Please choose your gender as recorded with the credit bureau."
+INVALID_GENDER = "Please choose one of the options below."
+BTN_MALE = ("male", "Male")
+BTN_FEMALE = ("female", "Female")
+FETCHING_DIRECT = "Thank you! We're fetching your credit report now. This usually takes under a minute."
+PAN_BLOCKED = (
+    "For your security we couldn't process this request: this PAN or WhatsApp number was recently used for "
+    "another report. You have not been charged. Please contact our support team."
+)

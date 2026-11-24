@@ -51,7 +51,8 @@ DELIVERED_STATUSES = frozenset({DeliveryStatus.SENT, DeliveryStatus.DELIVERED, D
 _ABANDON = {ReportStatus.CANCELLED, ReportStatus.EXPIRED, ReportStatus.FAILED}
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     ReportStatus.DRAFT: frozenset({ReportStatus.CONSENTED, *_ABANDON}),
-    ReportStatus.CONSENTED: frozenset({ReportStatus.OTP_SENT, *_ABANDON}),
+    # CONSENTED -> FETCHING only for providers that need no OTP (enforced in ReportService.fetch_report).
+    ReportStatus.CONSENTED: frozenset({ReportStatus.OTP_SENT, ReportStatus.FETCHING, *_ABANDON}),
     ReportStatus.OTP_SENT: frozenset({ReportStatus.OTP_SENT, ReportStatus.OTP_VERIFIED, *_ABANDON}),  # resend
     ReportStatus.OTP_VERIFIED: frozenset({ReportStatus.FETCHING, *_ABANDON}),
     # No CANCELLED/EXPIRED while fetching: the provider call is in flight and may already be billed.
@@ -94,6 +95,8 @@ class ReportRequest(UUIDModel):
     provider_name = models.CharField(max_length=50, blank=True)
     provider_session_ref = models.CharField(max_length=128, blank=True, db_index=True)
     provider_report_ref = models.CharField(max_length=128, blank=True)
+    # Blind-index of the PAN the report was pulled for (misuse guard for providers without OTP).
+    pan_hash = models.CharField(max_length=64, blank=True, db_index=True)
 
     # OTP bookkeeping only. The OTP itself is never stored anywhere (ARCHITECTURE §6.5).
     otp_attempts = models.PositiveSmallIntegerField(default=0)

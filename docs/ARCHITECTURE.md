@@ -485,6 +485,13 @@ class CreditReportProvider(ABC):
 - Duplicate payments (customer pays an old and a new link) are recorded and audited as `payment.duplicate`
   for refund, never silently dropped.
 
+**Phase 10 notes (as built, Surepass):** `CreditReportProvider.requires_otp = False` providers go
+CONSENTED → FETCHING directly (`fetch_report_without_otp`). Because the bureau then does not verify that
+the requester owns the PAN, `ReportService._pan_guard` refuses a PAN already reported for another WhatsApp
+number, or a second PAN for the same number, within `PAN_GUARD_DAYS` (default 30). The `mobile` sent to the
+provider is always the customer's own WhatsApp number, never a typed number. Consent text line 2 and the
+consent version (`…-direct`) reflect the no-OTP flow.
+
 ## 10. Admin dashboard (React)
 
 Stack: Vite, React 18, React Router, TanStack Query, Tailwind, React Hook Form + Zod, Recharts.

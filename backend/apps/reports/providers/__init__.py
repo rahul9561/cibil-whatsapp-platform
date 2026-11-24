@@ -3,8 +3,9 @@ from apps.core.integrations import load_adapter
 from .base import CreditReportProvider
 
 PROVIDERS = {
-    "mock": "apps.reports.providers.mock.MockCreditReportProvider",
-    # The authorised partner's adapter is registered here in Phase 10, from its documentation.
+    "mock": "apps.reports.providers.mock.MockCreditReportProvider",  # OTP flow
+    "mock_no_otp": "apps.reports.providers.mock.MockDirectCreditReportProvider",  # Surepass-like, no OTP
+    "surepass": "apps.reports.providers.surepass.SurepassCreditReportProvider",
 }
 
 

@@ -12,8 +12,11 @@ Tick every item before real customers are let in. Items marked **(blocking)** ar
 - [ ] DPDP Act 2023: data-retention schedule, erasure procedure and breach-response contact agreed.
 
 ## Integrations
-- [ ] **(blocking)** Real credit-provider adapter implemented from the partner's documentation and tested in their
-      sandbox (Phase 10). `CREDIT_PROVIDER` is not `mock`; `ALLOW_MOCK_ADAPTERS` is unset.
+- [ ] **(blocking)** `CREDIT_PROVIDER=surepass` with a production `SUREPASS_API_TOKEN`; one real report fetched
+      and saved end to end. `ALLOW_MOCK_ADAPTERS` is unset.
+- [ ] **(blocking)** Surepass has no OTP step: legal sign-off that consent + WhatsApp number + PAN guard is an
+      acceptable verification for releasing a credit report, or a provider flow with OTP is used instead.
+- [ ] Surepass confirmed: no-hit response format, accepted gender values, billing of timed-out calls.
 - [ ] **(blocking)** Razorpay live keys (`rzp_live_…`); webhook registered with the five events; one real ₹1
       payment and refund done end to end.
 - [ ] **(blocking)** WhatsApp: verified business, production number, long-lived System User token, webhook

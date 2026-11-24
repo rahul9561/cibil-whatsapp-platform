@@ -110,6 +110,12 @@ REPORT_FILE_ENCRYPTION_KEYS = env.list("REPORT_FILE_ENCRYPTION_KEYS")
 CREDIT_PROVIDER = env("CREDIT_PROVIDER", default="")
 PAYMENT_GATEWAY = env("PAYMENT_GATEWAY", default="")
 WHATSAPP_GATEWAY = env("WHATSAPP_GATEWAY", default="")
+# Surepass credit report API (CREDIT_PROVIDER=surepass). Token only ever from the environment.
+SUREPASS_BASE_URL = env("SUREPASS_BASE_URL", default="https://app.surepass.app")
+SUREPASS_API_TOKEN = env("SUREPASS_API_TOKEN", default="")
+# Hosts the report PDF may be downloaded from (the sample response links to an S3 bucket).
+SUREPASS_PDF_HOSTS = env.list("SUREPASS_PDF_HOSTS", default=["amazonaws.com"])
+
 # Razorpay (Phase 6). Test-mode keys start with rzp_test_. Secrets only ever come from the environment.
 RAZORPAY_KEY_ID = env("RAZORPAY_KEY_ID", default="")
 RAZORPAY_KEY_SECRET = env("RAZORPAY_KEY_SECRET", default="")
@@ -142,6 +148,9 @@ FOLLOWUP_ESCALATE_QUIET_HOURS = env.int(
     "FOLLOWUP_ESCALATE_QUIET_HOURS", default=24
 )  # ...and no note this long
 FOLLOWUP_MAX_ESCALATION = env.int("FOLLOWUP_MAX_ESCALATION", default=3)
+# Providers without OTP don't prove PAN ownership: block the same PAN on another number / another PAN on the
+# same number within this many days (0 disables; see ReportService._pan_guard).
+PAN_GUARD_DAYS = env.int("PAN_GUARD_DAYS", default=30)
 STALE_REQUEST_MINUTES = env.int("STALE_REQUEST_MINUTES", default=60)  # unfinished details/consent/OTP
 WHATSAPP_TEMPLATE_LANGUAGE = env("WHATSAPP_TEMPLATE_LANGUAGE", default="en")
 # Logical name -> approved WhatsApp template name. Needed outside the 24-hour service window.

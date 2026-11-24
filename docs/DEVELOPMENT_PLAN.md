@@ -103,7 +103,16 @@ inspected before any change, and nothing is overwritten without confirmation.
   than TypeScript; Prettier for formatting (no ESLint yet). Backend addition: `GET follow-ups/assignees`
   so admins can assign without the staff-management capability.
 
-## Phase 10 — Real provider adapter (when docs are available)
+## Phase 10 — Real provider adapter ✅ Surepass (code; live call pending a token)
+- Provider: Surepass `credit-report-cibil/fetch-report-pdf`, built from the request/response sample supplied
+  on 2026-11-24 (`apps/reports/providers/surepass.py`). Set `CREDIT_PROVIDER=surepass` + `SUREPASS_API_TOKEN`.
+- This endpoint has **no OTP**: providers now declare `requires_otp` and `required_fields`; the bot asks
+  name, PAN and gender (no date of birth) and fetches right after consent. A PAN-misuse guard
+  (`PAN_GUARD_DAYS`) blocks the same PAN on another number and several PANs on one number.
+- The PDF link expires in 10 minutes: it is downloaded immediately (https, allowed hosts, size cap, must be a
+  PDF) and saved encrypted in private storage; a retry re-downloads instead of paying for a second pull.
+- To confirm with Surepass: sandbox URL; accepted gender values; the response for "no credit history";
+  whether timed-out calls are billed and can be looked up; whether an OTP/consent-verified variant exists.
 - Implement the authorised partner's adapter strictly from its documentation; contract tests against its sandbox.
 - Can run in parallel with Phases 8–9 once documentation arrives.
 

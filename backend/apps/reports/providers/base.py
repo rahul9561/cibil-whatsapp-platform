@@ -33,8 +33,8 @@ __all__ = [
 class Applicant:
     full_name: str
     pan: str
-    dob: date
-    mobile: str  # E.164 digits, e.g. 919876543210
+    dob: date | None  # not every provider needs it (see required_fields)
+    mobile: str  # E.164 digits, e.g. 919876543210 (the customer's own WhatsApp number)
     email: str = ""
     pincode: str = ""
     gender: str = ""
@@ -72,6 +72,17 @@ class ReportResult:
 
 class CreditReportProvider(ABC):
     name: str
+    # True: the provider verifies the customer with an OTP (initiate_otp -> verify_otp -> fetch_report).
+    # False: the provider returns the report on consent alone (fetch_report_without_otp). Ownership of the
+    # PAN is then NOT verified by the bureau, so ReportService applies its PAN-misuse guard.
+    requires_otp: bool = True
+    # Customer details the bot must collect for this provider ("mobile" always comes from WhatsApp).
+    required_fields: frozenset[str] = frozenset({"full_name", "pan", "dob"})
+
+    def fetch_report_without_otp(self, applicant: Applicant, consent_ref: str) -> ReportResult:
+        """Only for providers with requires_otp = False. Must be safe to call again for the same consent_ref
+        (return the same report without a second pull) for as long as the provider allows."""
+        raise NotImplementedError(f"{self.name} requires OTP verification")
 
     @abstractmethod
     def initiate_otp(self, applicant: Applicant, consent_ref: str) -> OtpSession: ...

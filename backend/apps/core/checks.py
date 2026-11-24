@@ -44,7 +44,7 @@ def check_mock_adapters(app_configs, **kwargs):
     mocked = [
         name
         for name in ("CREDIT_PROVIDER", "PAYMENT_GATEWAY", "WHATSAPP_GATEWAY")
-        if getattr(settings, name, "") == "mock"
+        if str(getattr(settings, name, "")).startswith("mock")
     ]
     if mocked:
         return [
@@ -86,3 +86,15 @@ def check_whatsapp(app_configs, **kwargs):
         for name in names
         if not getattr(settings, name, "")
     ]
+
+
+@register(Tags.security, deploy=False)
+def check_surepass(app_configs, **kwargs):
+    if getattr(settings, "CREDIT_PROVIDER", "") != "surepass":
+        return []
+    errors = []
+    if not settings.SUREPASS_API_TOKEN:
+        errors.append(Error("SUREPASS_API_TOKEN is required when CREDIT_PROVIDER=surepass.", id="core.E010"))
+    if not settings.SUREPASS_BASE_URL.startswith("https://"):
+        errors.append(Error("SUREPASS_BASE_URL must use https.", id="core.E011"))
+    return errors
