@@ -21,6 +21,7 @@ __all__ = [
     "Applicant",
     "CreditReportProvider",
     "OtpSession",
+    "Prefill",
     "PermanentError",
     "ReportOutcome",
     "ReportResult",
@@ -41,6 +42,19 @@ class Applicant:
 
     def __repr__(self) -> str:  # never leak PII through repr() in logs or tracebacks
         return "Applicant(<redacted>)"
+
+
+@dataclass(frozen=True)
+class Prefill:
+    """Details looked up from the bureau by mobile number. Only what the report call needs is kept."""
+
+    full_name: str = ""
+    pan: str = ""
+    gender: str = ""  # "M" / "F" / "" (unknown)
+    ref: str = ""  # provider reference (e.g. Surepass client_id), not personal data
+
+    def __repr__(self) -> str:
+        return "Prefill(<redacted>)"
 
 
 @dataclass(frozen=True)
@@ -78,6 +92,13 @@ class CreditReportProvider(ABC):
     requires_otp: bool = True
     # Customer details the bot must collect for this provider ("mobile" always comes from WhatsApp).
     required_fields: frozenset[str] = frozenset({"full_name", "pan", "dob"})
+
+    # True: the provider can look up name/PAN/gender from the customer's mobile number (after consent).
+    supports_prefill: bool = False
+
+    def prefill_by_mobile(self, mobile: str, consent_ref: str) -> "Prefill | None":
+        """Details linked to `mobile` (E.164 digits), or None if the bureau has no clear match."""
+        raise NotImplementedError(f"{self.name} has no prefill lookup")
 
     def fetch_report_without_otp(self, applicant: Applicant, consent_ref: str) -> ReportResult:
         """Only for providers with requires_otp = False. Must be safe to call again for the same consent_ref

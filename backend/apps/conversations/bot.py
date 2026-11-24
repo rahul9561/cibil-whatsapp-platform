@@ -9,6 +9,7 @@ task can never be overwritten by this handler's state. Replies are cached per me
 re-sends what is missing without re-running the bot (the text was already consumed).
 """
 
+import json
 import logging
 from dataclasses import dataclass, field
 
@@ -17,10 +18,10 @@ from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from apps.core.crypto import blind_index, decrypt_str
+from apps.core.crypto import blind_index, decrypt_str, encrypt_str
 from apps.core.integrations import LockNotAcquired, PermanentError, TransientError, distributed_lock
 from apps.core.masking import mask_name, mask_pan
-from apps.customers.models import WA_ID_PURPOSE, Customer
+from apps.customers.models import WA_ID_PURPOSE, Customer, Gender
 from apps.messaging.gateway.base import Button
 from apps.messaging.inbound import take_body
 from apps.messaging.models import OTP_PLACEHOLDER, Direction, MessageLog, MessageStatus, MessageType
@@ -56,6 +57,27 @@ START_WORDS = {"hi", "hii", "hello", "hey", "namaste", "start", "report", "cibil
 def wants_new_report(text: str) -> bool:
     words = (text or "").lower().replace("!", " ").replace(".", " ").replace("?", " ").split()
     return bool(words) and (words[0] in START_WORDS or "report" in words)
+
+
+PENDING_TTL = 30 * 60
+
+
+def _pending_key(customer) -> str:
+    return f"prefill-pending:{customer.pk}"
+
+
+def save_pending(customer, prefill) -> None:
+    data = {"full_name": prefill.full_name, "pan": prefill.pan, "gender": prefill.gender}
+    cache.set(_pending_key(customer), encrypt_str(json.dumps(data)), timeout=PENDING_TTL)
+
+
+def load_pending(customer) -> dict | None:
+    blob = cache.get(_pending_key(customer))
+    return json.loads(decrypt_str(blob)) if blob else None
+
+
+def clear_pending(customer) -> None:
+    cache.delete(_pending_key(customer))
 
 
 @dataclass
@@ -120,6 +142,7 @@ class Bot:
             except InvalidTransition:
                 self.say(t.CANNOT_CANCEL)
                 return
+        clear_pending(self.customer)
         self.conv.active_report_request = None
         self.go(S.ENDED)
         self.say(t.CANCELLED)
@@ -138,6 +161,20 @@ class Bot:
             self.start_details()
         else:
             self.resume(req)
+
+    @property
+    def prefill_mode(self) -> bool:
+        p = self.reports.provider
+        return bool(settings.PREFILL_BY_MOBILE and p.supports_prefill and not p.requires_otp)
+
+    def details_complete(self) -> bool:
+        return all(getattr(self.customer, f) for f in self.needed)
+
+    def ask_consent_first(self):
+        """Prefill flow: consent before the bureau lookup."""
+        self.conv.context = {**self.conv.context, "details_confirmed": False}
+        self.go(S.AWAITING_CONSENT)
+        self.say(self.consent()[1], t.BTN_AGREE, t.BTN_DECLINE)
 
     on_new = _idle  # first contact: any message starts
 
@@ -182,10 +219,11 @@ class Bot:
         return self.prompt_confirm()
 
     def start_details(self):
-        c = self.customer
-        if all(getattr(c, f) for f in self.needed):
+        if self.details_complete():
             self.say(t.SAVED_DETAILS)
             self.prompt_confirm()
+        elif self.prefill_mode:
+            self.ask_consent_first()
         else:
             self.ask_next_after(None)
 
@@ -196,8 +234,14 @@ class Bot:
         elif status == ReportStatus.CONSENTED:
             if self.reports.provider.requires_otp:
                 self.request_otp()
-            else:
+            elif self.conv.state == S.FETCHING_REPORT:
                 self.start_direct_fetch(req, t.STILL_FETCHING)
+            elif load_pending(self.customer):
+                self.prompt_confirm(pending=load_pending(self.customer))
+            elif self.details_complete():
+                self.prompt_confirm()
+            else:
+                self.run_prefill()
         elif status == ReportStatus.OTP_SENT:
             self.go(S.AWAITING_OTP)
             self.say(t.OTP_SENT.format(destination=""), t.BTN_RESEND)
@@ -245,36 +289,92 @@ class Bot:
         self.customer.save(update_fields=["gender", "updated_at"])
         self.ask_next_after("gender")
 
-    def prompt_confirm(self):
+    def prompt_confirm(self, pending: dict | None = None):
         c = self.customer
-        lines = [f"Name: {mask_name(c.full_name)}", f"PAN: {mask_pan(c.pan)}"]
-        if "dob" in self.needed and c.dob:
+        name = pending["full_name"] if pending else c.full_name
+        pan = pending["pan"] if pending else c.pan
+        gender = pending["gender"] if pending else c.gender
+        lines = [f"Name: {mask_name(name)}", f"PAN: {mask_pan(pan)}"]
+        if "dob" in self.needed and c.dob and not pending:
             lines.append(f"Date of birth: {c.dob[8:10]}-{c.dob[5:7]}-****")
-        if "gender" in self.needed and c.gender:
-            lines.append(f"Gender: {c.get_gender_display()}")
+        if "gender" in self.needed and gender:
+            lines.append(f"Gender: {dict(Gender.choices).get(gender, gender)}")
         self.go(S.CONFIRM_DETAILS)
-        self.say(t.CONFIRM_DETAILS.format(details="\n".join(lines)), t.BTN_CONFIRM, t.BTN_EDIT)
+        if pending:
+            self.say(t.CONFIRM_PREFILL.format(details="\n".join(lines)), t.BTN_ITS_ME, t.BTN_NOT_ME)
+        else:
+            self.say(t.CONFIRM_DETAILS.format(details="\n".join(lines)), t.BTN_CONFIRM, t.BTN_EDIT)
+
+    def run_prefill(self):
+        """After consent: look up the details linked to this number; fall back to asking on any problem."""
+        try:
+            found = self.reports.prefill(self.request.pk)
+        except (TransientError, PermanentError, LockNotAcquired):
+            found, message = None, t.PREFILL_UNAVAILABLE
+        else:
+            message = t.PREFILL_NOT_FOUND
+        if found is None:
+            self.say(message)
+            return self.ask_next_after(None)
+        save_pending(self.customer, found)
+        pending = load_pending(self.customer)
+        missing = [f for f in ("full_name", "pan", "gender") if f in self.needed and not pending.get(f)]
+        if missing:
+            # Partial match: keep what was found and let the customer fill the gap (saved on confirm).
+            self.apply_pending(pending)
+            clear_pending(self.customer)
+            self.say(t.PREFILL_NOT_FOUND)
+            return self._ask(missing[0])
+        self.prompt_confirm(pending=pending)
+
+    def apply_pending(self, pending: dict):
+        c = self.customer
+        c.full_name = pending.get("full_name") or c.full_name
+        if pending.get("pan"):
+            c.set_pan(pending["pan"])
+        c.gender = pending.get("gender") or c.gender
+        c.save(update_fields=["full_name", "pan", "pan_hash", "gender", "updated_at"])
 
     def consent(self) -> tuple[str, str]:
         """(version, exact text) for the active provider: the OTP promise only appears when it is true."""
         direct = not self.reports.provider.requires_otp
-        verification = (
-            t.CONSENT_DIRECT_LINE.format(mobile=self.customer.masked_phone) if direct else t.CONSENT_OTP_LINE
-        )
+        prefill = self.prefill_mode and not self.conv.context.get("details_confirmed")
+        if prefill:
+            verification = t.CONSENT_PREFILL_LINE.format(mobile=self.customer.masked_phone)
+        elif direct:
+            verification = t.CONSENT_DIRECT_LINE.format(mobile=self.customer.masked_phone)
+        else:
+            verification = t.CONSENT_OTP_LINE
         text = t.CONSENT_TEXT.format(
             verification=verification,
             price=format_rupees(settings.REPORT_PRICE_PAISE),
             retention=settings.REPORT_PDF_RETENTION_DAYS,
         )
-        return f"{t.CONSENT_VERSION}-{'direct' if direct else 'otp'}", text
+        flavour = "prefill" if prefill else "direct" if direct else "otp"
+        return f"{t.CONSENT_VERSION}-{flavour}", text
 
     def on_confirm_details(self, choice, reply_id):
         answer = choice.lower()
-        if answer in {"confirm", "yes", "y", "1"}:
+        pending = load_pending(self.customer)
+        req = self.request
+        consented = bool(req and req.report_status == ReportStatus.CONSENTED)
+        if answer in {"confirm", "yes", "y", "1", "yes, that's me"}:
+            if pending:
+                self.apply_pending(pending)  # only now do looked-up details enter the customer record
+                clear_pending(self.customer)
+            if consented and not self.reports.provider.requires_otp:
+                return self.start_direct_fetch(req, t.FETCHING_DIRECT)
+            self.conv.context = {**self.conv.context, "details_confirmed": True}
             self.go(S.AWAITING_CONSENT)
             self.say(self.consent()[1], t.BTN_AGREE, t.BTN_DECLINE)
+        elif answer in {"not_me", "no, not me"} or (pending and answer in {"edit", "no", "n", "2"}):
+            clear_pending(self.customer)
+            self.say(t.PREFILL_NOT_ME)
+            self.ask_next_after(None)
         elif answer in {"edit", "no", "n", "2"}:
             self.ask_next_after(None)
+        elif pending:
+            self.say(t.PLEASE_CHOOSE, t.BTN_ITS_ME, t.BTN_NOT_ME)
         else:
             self.say(t.PLEASE_CHOOSE, t.BTN_CONFIRM, t.BTN_EDIT)
 
@@ -289,12 +389,15 @@ class Bot:
             )
             if self.reports.provider.requires_otp:
                 self.request_otp()
-            else:
+            elif self.conv.context.get("details_confirmed") or not self.prefill_mode:
                 self.start_direct_fetch(self.request, t.FETCHING_DIRECT)
+            else:
+                self.run_prefill()
         elif answer in {"decline", "no", "n", "no, thanks"}:
             req = self.request
             if req is not None and req.is_open:
                 self.reports.cancel(req.pk, by_user=None, reason="consent_declined")
+            clear_pending(self.customer)
             self.conv.active_report_request = None
             self.go(S.ENDED)
             self.say(t.DECLINED)
@@ -305,6 +408,7 @@ class Bot:
         """Providers without OTP: the report is requested as soon as consent is recorded."""
         from apps.reports.tasks import fetch_report_task
 
+        self.conv.context = {k: v for k, v in self.conv.context.items() if k != "details_confirmed"}
         self.go(S.FETCHING_REPORT)
         self.say(message)
         self.effects.append(lambda pk=str(req.pk): fetch_report_task.delay(pk))

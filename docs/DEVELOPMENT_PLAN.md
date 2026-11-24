@@ -111,7 +111,12 @@ inspected before any change, and nothing is overwritten without confirmation.
   (`PAN_GUARD_DAYS`) blocks the same PAN on another number and several PANs on one number.
 - The PDF link expires in 10 minutes: it is downloaded immediately (https, allowed hosts, size cap, must be a
   PDF) and saved encrypted in private storage; a retry re-downloads instead of paying for a second pull.
-- To confirm with Surepass: sandbox URL; accepted gender values; the response for "no credit history";
+- Prefill-by-mobile (sample supplied 2026-11-24): the customer only sends "Hi". After consent, name/PAN/gender
+  are looked up for their own WhatsApp number (`prefill_by_mobile`), held encrypted in Redis (not the
+  database) and shown masked for "Is this you?". "No, not me" discards them and the customer types details;
+  no record / several PANs / provider down also fall back to typing. Everything else in the prefill response
+  (addresses, e-mail, other IDs) is discarded. `PREFILL_BY_MOBILE`, `PREFILL_MAX_PER_DAY`.
+- To confirm with Surepass: the prefill "not found" response;  sandbox URL; accepted gender values; the response for "no credit history";
   whether timed-out calls are billed and can be looked up; whether an OTP/consent-verified variant exists.
 - Implement the authorised partner's adapter strictly from its documentation; contract tests against its sandbox.
 - Can run in parallel with Phases 8–9 once documentation arrives.

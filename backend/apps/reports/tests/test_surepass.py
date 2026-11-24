@@ -250,3 +250,132 @@ def test_startup_check_requires_token(settings):
     settings.CREDIT_PROVIDER = "surepass"
     settings.SUREPASS_API_TOKEN = ""
     assert "core.E010" in [e.id for e in run_checks(tags=["security"])]
+
+
+# --- prefill by mobile ----------------------------------------------------------------------------------
+
+PREFILL_SAMPLE = {
+    "data": {
+        "client_id": "prefill_report_v2_FpyRXBhdoauvQNwrQzke",
+        "name": "RAJENDRA SINGH",
+        "mobile": "9660123456",
+        "personal_info": {
+            "full_name": "RAJENDRA SINGH ",
+            "dob": "1968-10-20",
+            "gender": "Male",
+            "total_income": "",
+            "occupation": "",
+            "age": "55",
+        },
+        "phone_info": [{"reported_date": "2024-01-28", "type_code": "H", "number": "00001427"}],
+        "address_info": [
+            {
+                "address": "S/O SHIV PRASAD SINGH MAHWA",
+                "state": "RAJASTHAN",
+                "type": "Permanent",
+                "postal": "123456",
+                "reported_date": "2024-01-28",
+            }
+        ],
+        "email_info": [{"reported_date": "2021-06-30", "email_address": "VISHALRATHORE@GMAIL.COM"}],
+        "identity_info": {
+            "pan_number": [{"id_number": "CMGPA1234J"}],
+            "passport_number": [],
+            "driving_license": [],
+            "voter_id": [{"id_number": "RJ100873123456"}],
+            "aadhaar_number": [{"id_number": "XXXXXXXXXXXX"}],
+            "ration_card": [],
+            "other_id": [],
+        },
+    },
+    "status_code": 200,
+    "success": True,
+    "message": "Success",
+    "message_code": "success",
+}
+
+
+def test_prefill_request_and_only_name_pan_gender_are_kept(settings):
+    settings.SUREPASS_KYC_BASE_URL = "https://kyc-api.surepass.app"
+    s = fake_session(post=FakeResponse(body=PREFILL_SAMPLE))
+    found = SurepassCreditReportProvider(session=s).prefill_by_mobile("919660123456", consent_ref="c-p1")
+    url, kwargs = s.post.call_args[0][0], s.post.call_args[1]
+    assert url == "https://kyc-api.surepass.app/api/v1/prefill/prefill-by-mobile"
+    assert kwargs["json"] == {"mobile": "9660123456"}
+    assert kwargs["headers"]["Authorization"] == "Bearer test-token"
+    assert (found.full_name, found.pan, found.gender) == ("RAJENDRA SINGH", "CMGPA1234J", "M")
+    assert found.ref == "prefill_report_v2_FpyRXBhdoauvQNwrQzke"
+    # Nothing else from the response survives: no addresses, e-mail, voter id, dob.
+    kept = json.dumps(found.__dict__)
+    for leaked in ("MAHWA", "GMAIL", "RJ1008", "1968-10-20", "RAJASTHAN"):
+        assert leaked not in kept
+    assert "RAJENDRA" not in repr(found)
+
+
+def test_prefill_uses_its_own_token_when_set(settings):
+    settings.SUREPASS_PREFILL_TOKEN = "kyc-token"
+    s = fake_session(post=FakeResponse(body=PREFILL_SAMPLE))
+    SurepassCreditReportProvider(session=s).prefill_by_mobile("919660123456", consent_ref="c")
+    assert s.post.call_args[1]["headers"]["Authorization"] == "Bearer kyc-token"
+
+
+def _with_pans(pans):
+    body = json.loads(json.dumps(PREFILL_SAMPLE))
+    body["data"]["identity_info"]["pan_number"] = [{"id_number": p} for p in pans]
+    return body
+
+
+@pytest.mark.parametrize(
+    ("pans", "expected"),
+    [
+        ([], ""),
+        (["CMGPA1234J", "ZZZZZ9999Z"], ""),
+        (["not-a-pan"], ""),
+        (["cmgpa1234j", "CMGPA1234J"], "CMGPA1234J"),
+    ],
+)
+def test_prefill_pan_must_be_single_and_valid(pans, expected):
+    s = fake_session(post=FakeResponse(body=_with_pans(pans)))
+    found = SurepassCreditReportProvider(session=s).prefill_by_mobile("919660123456", consent_ref="c")
+    assert found.pan == expected and found.full_name == "RAJENDRA SINGH"
+
+
+@pytest.mark.parametrize(
+    "post",
+    [
+        FakeResponse(status=404, body={"success": False, "message_code": "not_found"}),
+        FakeResponse(status=200, body={"success": False, "message_code": "no_record"}),
+        FakeResponse(status=422, body={"success": False}),
+    ],
+)
+def test_prefill_not_found_returns_none(post):
+    assert (
+        SurepassCreditReportProvider(session=fake_session(post=post)).prefill_by_mobile(
+            "919660123456", consent_ref="c"
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("post", "kind", "code"),
+    [
+        (FakeResponse(status=401, body={}), PermanentError, "provider_auth"),
+        (FakeResponse(status=503, body={}), TransientError, "provider_http_503"),
+        (requests.exceptions.ConnectTimeout(), TransientError, "provider_timeout"),
+    ],
+)
+def test_prefill_errors(post, kind, code):
+    with pytest.raises(kind) as exc:
+        SurepassCreditReportProvider(session=fake_session(post=post)).prefill_by_mobile("919660123456", "c")
+    assert exc.value.code == code
+
+
+def test_prefill_requires_consent_and_indian_number():
+    s = fake_session(post=FakeResponse(body=PREFILL_SAMPLE))
+    p = SurepassCreditReportProvider(session=s)
+    with pytest.raises(PermanentError, match="consent"):
+        p.prefill_by_mobile("919660123456", consent_ref="")
+    with pytest.raises(PermanentError):
+        p.prefill_by_mobile("14155550100", consent_ref="c")
+    s.post.assert_not_called()

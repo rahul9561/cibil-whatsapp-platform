@@ -23,6 +23,10 @@ cp .env.example .env          # then replace every "change-me" value
 docker compose -f infrastructure/compose/docker-compose.dev.yml --env-file .env up --build
 ```
 
+<!-- docker compose -f infrastructure/compose/docker-compose.dev.yml exec web python manage.py seed_dev_staff -->
+
+<!-- docker compose -f infrastructure/compose/docker-compose.dev.yml --env-file .env exec web python manage.py createsuperuser -->
+
 - API: http://localhost:8000 — `GET /healthz` (liveness), `GET /readyz` (MySQL + Redis)
 - MySQL is reachable from the host on `127.0.0.1:3307` for DB tools.
 

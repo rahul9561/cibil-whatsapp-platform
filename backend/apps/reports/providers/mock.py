@@ -130,6 +130,21 @@ class MockDirectCreditReportProvider(MockCreditReportProvider):
     name = "mock_no_otp"
     requires_otp = False
     required_fields = frozenset({"full_name", "pan", "gender"})
+    supports_prefill = True
+
+    def prefill_by_mobile(self, mobile: str, consent_ref: str):
+        """By the number's last digit: 9 -> no record, 8 -> provider down, otherwise RAHUL SHARMA,
+        PAN "PFILL" + last 4 digits + "P", male."""
+        from .base import Prefill
+
+        digits = "".join(ch for ch in mobile if ch.isdigit())
+        if not consent_ref:
+            raise PermanentError("consent is required", code="consent_missing")
+        if digits.endswith("9"):
+            return None
+        if digits.endswith("8"):
+            raise TransientError("prefill timeout", code="provider_timeout")
+        return Prefill(full_name="RAHUL SHARMA", pan=f"PFILL{digits[-4:]}P", gender="M", ref="prefill_mock")
 
     def fetch_report_without_otp(self, applicant: Applicant, consent_ref: str) -> ReportResult:
         if applicant.pan == "REJEC0000R":

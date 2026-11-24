@@ -19,6 +19,7 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture(autouse=True)
 def direct_provider(settings):
     settings.CREDIT_PROVIDER = "mock_no_otp"
+    settings.PREFILL_BY_MOBILE = False  # these tests cover the typed-details path; prefill has its own tests
 
 
 def say(wa, text=None, button=None):

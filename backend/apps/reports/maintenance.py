@@ -6,6 +6,7 @@ from datetime import timedelta
 from celery import shared_task
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.audit import service as audit
@@ -53,14 +54,23 @@ def expire_stale_requests() -> dict:
 
     # 1. Abandoned while collecting details / consent / OTP. The report status doesn't move while the
     #    customer types their details, so the conversation's last message counts as activity too.
-    #    For providers without OTP a CONSENTED request is waiting for the fetch, not for the customer.
+    #    For no-OTP providers, a CONSENTED request whose conversation is already "fetching" waits for
+    #    the fetch (restarted in step 3); otherwise it is waiting for the customer to confirm details.
+    from apps.conversations.models import ConversationState
+
     from .providers import get_provider
 
     direct = not get_provider().requires_otp
-    abandonable = [s for s in ABANDONABLE if not (direct and s == ReportStatus.CONSENTED)]
+    fetching = ConversationState.FETCHING_REPORT
     for req in ReportRequest.objects.filter(
-        report_status__in=abandonable, status_changed_at__lt=stale_before
+        report_status__in=ABANDONABLE, status_changed_at__lt=stale_before
     ):
+        if (
+            direct
+            and req.report_status == ReportStatus.CONSENTED
+            and Conversation.objects.filter(customer_id=req.customer_id, state=fetching).exists()
+        ):
+            continue
         last_seen = (
             Conversation.objects.filter(customer_id=req.customer_id)
             .values_list("last_inbound_at", flat=True)
@@ -89,9 +99,11 @@ def expire_stale_requests() -> dict:
 
     # 3. Self-healing: a fetch whose task was lost (worker crash, broker restart). Fetch is exactly-once,
     #    so restarting it is safe: it resumes from FETCHING instead of pulling a second report.
+    waiting = Q(report_status__in=[ReportStatus.OTP_VERIFIED, ReportStatus.FETCHING])
+    if direct:  # consented and confirmed: the conversation says "fetching" but the task never ran
+        waiting |= Q(report_status=ReportStatus.CONSENTED, customer__conversation__state=fetching)
     stuck = ReportRequest.objects.filter(
-        report_status__in=[ReportStatus.OTP_VERIFIED, ReportStatus.FETCHING]
-        + ([ReportStatus.CONSENTED] if direct else []),
+        waiting,
         status_changed_at__lt=now - FETCH_STUCK_AFTER,
     )
     for pk in stuck.values_list("pk", flat=True)[:100]:

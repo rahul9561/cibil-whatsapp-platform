@@ -107,3 +107,15 @@ PAN_BLOCKED = (
     "For your security we couldn't process this request: this PAN or WhatsApp number was recently used for "
     "another report. You have not been charged. Please contact our support team."
 )
+
+# Prefill-by-mobile (details looked up from the customer's WhatsApp number after consent).
+CONSENT_PREFILL_LINE = (
+    "We will look up the details the credit bureau links to this WhatsApp number ({mobile}) - your name, PAN "
+    "and gender - and use them to request your report. Only continue if this number and PAN are your own."
+)
+CONFIRM_PREFILL = "We found these details linked to your number:\n\n{details}\n\nIs this you?"
+PREFILL_NOT_FOUND = "We couldn't find your details automatically, so please type them in."
+PREFILL_UNAVAILABLE = "We couldn't look up your details right now, so please type them in."
+PREFILL_NOT_ME = "No problem, those details have been discarded. Please type your own details."
+BTN_ITS_ME = ("confirm", "Yes, that's me")
+BTN_NOT_ME = ("not_me", "No, not me")

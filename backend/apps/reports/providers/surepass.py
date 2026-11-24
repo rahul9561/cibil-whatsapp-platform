@@ -32,6 +32,7 @@ from .base import (
     CreditReportProvider,
     OtpSession,
     PermanentError,
+    Prefill,
     ReportOutcome,
     ReportResult,
     TransientError,
@@ -41,6 +42,9 @@ from .base import (
 logger = logging.getLogger(__name__)
 
 FETCH_PATH = "/production/api/v1/credit-report-cibil/fetch-report-pdf"
+# Prefill-by-mobile lives on a different Surepass host (sample supplied 2026-11-24).
+PREFILL_PATH = "/api/v1/prefill/prefill-by-mobile"
+PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
 API_TIMEOUT = (10, 120)  # connect, read: the bureau call can take a while
 PDF_TIMEOUT = (10, 60)
 MAX_PDF_BYTES = 15 * 1024 * 1024
@@ -58,12 +62,63 @@ class SurepassCreditReportProvider(CreditReportProvider):
     name = "surepass"
     requires_otp = False
     required_fields = frozenset({"full_name", "pan", "gender"})
+    supports_prefill = True
 
     def __init__(self, session: requests.Session | None = None):
         self.session = session or requests.Session()
         self.base_url = settings.SUREPASS_BASE_URL.rstrip("/")
         self.token = settings.SUREPASS_API_TOKEN
         self.pdf_hosts = tuple(h.strip().lower() for h in settings.SUREPASS_PDF_HOSTS if h.strip())
+        self.kyc_base_url = settings.SUREPASS_KYC_BASE_URL.rstrip("/")
+        self.prefill_token = settings.SUREPASS_PREFILL_TOKEN or self.token
+
+    # -- prefill by mobile ----------------------------------------------------------------------------------
+
+    def prefill_by_mobile(self, mobile: str, consent_ref: str) -> Prefill | None:
+        """Look up name/PAN/gender for the customer's own number. Everything else in the response
+        (addresses, e-mail, other IDs, phone history) is discarded here and never stored or logged."""
+        if not consent_ref:
+            raise PermanentError("consent is required before a bureau lookup", code="consent_missing")
+        digits = re.sub(r"\D", "", mobile or "")
+        if len(digits) != 12 or not digits.startswith("91"):
+            raise PermanentError("an Indian mobile number is required", code="mobile_not_indian")
+        try:
+            resp = self.session.post(
+                self.kyc_base_url + PREFILL_PATH,
+                json={"mobile": digits[2:]},
+                headers={"Authorization": f"Bearer {self.prefill_token}", "Content-Type": "application/json"},
+                timeout=API_TIMEOUT,
+            )
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+            raise TransientError("surepass prefill: network error", code="provider_timeout") from exc
+        if resp.status_code in (401, 403):
+            logger.error("surepass prefill: authentication failed (status %s)", resp.status_code)
+            raise PermanentError("surepass prefill: authentication failed", code="provider_auth")
+        if resp.status_code == 429 or resp.status_code >= 500:
+            raise TransientError(
+                "surepass prefill: temporary error", code=f"provider_http_{resp.status_code}"
+            )
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {}
+        if resp.status_code >= 400 or not body.get("success"):
+            return None  # no record for this number (CONFIRM with Surepass: exact "not found" response)
+
+        data = body.get("data") or {}
+        personal = data.get("personal_info") or {}
+        name = " ".join(str(personal.get("full_name") or data.get("name") or "").split())
+        gender = {"male": "M", "female": "F"}.get(str(personal.get("gender") or "").strip().lower(), "")
+        pans = {
+            str(item.get("id_number") or "").strip().upper()
+            for item in ((data.get("identity_info") or {}).get("pan_number") or [])
+            if isinstance(item, dict)
+        }
+        pans = {p for p in pans if PAN_RE.match(p)}
+        pan = pans.pop() if len(pans) == 1 else ""  # none or several PANs: the customer types it
+        if not name and not pan:
+            return None
+        return Prefill(full_name=name, pan=pan, gender=gender, ref=str(data.get("client_id") or ""))
 
     # -- OTP: not offered by this endpoint -----------------------------------------------------------------
 

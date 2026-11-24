@@ -111,8 +111,15 @@ CREDIT_PROVIDER = env("CREDIT_PROVIDER", default="")
 PAYMENT_GATEWAY = env("PAYMENT_GATEWAY", default="")
 WHATSAPP_GATEWAY = env("WHATSAPP_GATEWAY", default="")
 # Surepass credit report API (CREDIT_PROVIDER=surepass). Token only ever from the environment.
-SUREPASS_BASE_URL = env("SUREPASS_BASE_URL", default="https://app.surepass.app")
+# An empty value in .env falls back to the default rather than producing a blank URL.
+SUREPASS_BASE_URL = env("SUREPASS_BASE_URL", default="") or "https://app.surepass.app"
 SUREPASS_API_TOKEN = env("SUREPASS_API_TOKEN", default="")
+# Prefill-by-mobile (name/PAN/gender from the customer's number): separate host; token defaults to the above.
+SUREPASS_KYC_BASE_URL = env("SUREPASS_KYC_BASE_URL", default="") or "https://kyc-api.surepass.app"
+SUREPASS_PREFILL_TOKEN = env("SUREPASS_PREFILL_TOKEN", default="")
+# Use prefill when the provider supports it: the customer only confirms details instead of typing them.
+PREFILL_BY_MOBILE = env.bool("PREFILL_BY_MOBILE", default=True)
+PREFILL_MAX_PER_DAY = env.int("PREFILL_MAX_PER_DAY", default=3)  # paid lookups per WhatsApp number per day
 # Hosts the report PDF may be downloaded from (the sample response links to an S3 bucket).
 SUREPASS_PDF_HOSTS = env.list("SUREPASS_PDF_HOSTS", default=["amazonaws.com"])
 

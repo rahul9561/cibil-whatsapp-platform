@@ -12,6 +12,7 @@ import re
 from datetime import date, timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -24,7 +25,7 @@ from apps.payments.models import PaymentLinkStatus
 
 from .models import DeliveryStatus, InvalidTransition, ReportDocument, ReportRequest, ReportStatus
 from .providers import get_provider
-from .providers.base import Applicant, OtpSession, ReportOutcome, VerifyOutcome
+from .providers.base import Applicant, OtpSession, Prefill, ReportOutcome, VerifyOutcome
 from .storage import ReportStorage
 
 _OTP_FORMAT = re.compile(r"^\d{4,8}$")
@@ -80,6 +81,36 @@ class ReportService:
             return ReportRequest.objects.get(active_lock=customer.pk), False
         _system("report.started", req)
         return req, True
+
+    def prefill(self, request_id) -> Prefill | None:
+        """Look up name/PAN/gender for the customer's own WhatsApp number (only after consent).
+
+        Returns None when the provider has no prefill, the daily cap is reached, or nothing clear was found.
+        TransientError propagates so the caller can fall back to asking the customer.
+        """
+        req = ReportRequest.objects.select_related("customer").get(pk=request_id)
+        if not req.consent_id:
+            raise InvalidTransition(f"{req.public_ref}: consent is required before a bureau lookup")
+        if not self.provider.supports_prefill:
+            return None
+        key = f"prefill-count:{req.customer_id}"
+        cache.add(key, 0, timeout=24 * 60 * 60)
+        try:
+            count = cache.incr(key)
+        except ValueError:
+            cache.set(key, 1, timeout=24 * 60 * 60)
+            count = 1
+        if count > settings.PREFILL_MAX_PER_DAY:
+            _system("report.prefill", req, outcome="daily_limit")
+            return None
+        result = self.provider.prefill_by_mobile(req.customer.wa_id, str(req.consent_id))
+        _system(
+            "report.prefill",
+            req,
+            outcome="found" if result else "not_found",
+            pan_found=bool(result and result.pan),
+        )
+        return result
 
     def record_consent(
         self, request_id, *, text_version: str, text: str, wa_message_id: str = ""

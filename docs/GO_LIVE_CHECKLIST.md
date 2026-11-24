@@ -16,7 +16,11 @@ Tick every item before real customers are let in. Items marked **(blocking)** ar
       and saved end to end. `ALLOW_MOCK_ADAPTERS` is unset.
 - [ ] **(blocking)** Surepass has no OTP step: legal sign-off that consent + WhatsApp number + PAN guard is an
       acceptable verification for releasing a credit report, or a provider flow with OTP is used instead.
-- [ ] Surepass confirmed: no-hit response format, accepted gender values, billing of timed-out calls.
+- [ ] Surepass confirmed: no-hit response format, accepted gender values, billing of timed-out calls,
+      prefill "not found" response, and whether prefill uses the same token.
+- [ ] **(blocking)** Legal sign-off on prefill-by-mobile: the bureau's details for a number may belong to
+      someone other than the WhatsApp user (recycled or shared numbers); masked "Is this you?" confirmation
+      plus the PAN guard are the only checks.
 - [ ] **(blocking)** Razorpay live keys (`rzp_live_…`); webhook registered with the five events; one real ₹1
       payment and refund done end to end.
 - [ ] **(blocking)** WhatsApp: verified business, production number, long-lived System User token, webhook

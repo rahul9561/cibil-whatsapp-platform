@@ -492,6 +492,12 @@ number, or a second PAN for the same number, within `PAN_GUARD_DAYS` (default 30
 provider is always the customer's own WhatsApp number, never a typed number. Consent text line 2 and the
 consent version (`…-direct`) reflect the no-OTP flow.
 
+**Prefill-by-mobile (as built):** with `PREFILL_BY_MOBILE` and a provider that supports it, consent comes
+first; then `ReportService.prefill` looks up the customer's own WhatsApp number (daily cap per number, audited
+as found/not_found without PII). The result stays encrypted in Redis for 30 minutes and only enters the
+customer record when the customer confirms the masked details. The clean-up job never fetches a CONSENTED
+request that is still waiting for that confirmation.
+
 ## 10. Admin dashboard (React)
 
 Stack: Vite, React 18, React Router, TanStack Query, Tailwind, React Hook Form + Zod, Recharts.

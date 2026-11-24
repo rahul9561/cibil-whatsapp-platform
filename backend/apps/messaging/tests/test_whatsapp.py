@@ -97,13 +97,17 @@ def test_empty_app_secret_rejects_everything(settings):
 
 @pytest.mark.django_db
 def test_message_is_processed_once_and_text_is_not_stored(django_capture_on_commit_callbacks):
+    # A distinctive text: searching for "hi" in the payload used to fail at random, because the encrypted
+    # sender (random ciphertext) sometimes contains those two letters.
+    text = "Hi there 7Q4ZK9"
     with django_capture_on_commit_callbacks(execute=True):
-        assert post(envelope([text_msg("hi")])).json() == {"status": "accepted", "events": 1}
+        assert post(envelope([text_msg(text)])).json() == {"status": "accepted", "events": 1}
     with django_capture_on_commit_callbacks(execute=True):
-        assert post(envelope([text_msg("hi")])).json() == {"status": "accepted", "events": 0}  # Meta retry
+        assert post(envelope([text_msg(text)])).json() == {"status": "accepted", "events": 0}  # Meta retry
     event = WebhookEvent.objects.get()
     assert event.processing_status == WebhookProcessingStatus.PROCESSED
-    assert "hi" not in json.dumps(event.payload).lower().replace("whatsapp", "")
+    assert "7Q4ZK9" not in json.dumps(event.payload)
+    assert set(event.payload) == {"wa_message_id", "from_enc", "type", "reply_id", "timestamp"}
     assert "919812300009" not in json.dumps(event.payload)  # sender stored encrypted
     replies = [m for m in outbox() if m["to"] == "919812300009"]
     assert len(replies) == 2 and "full name" in replies[-1]["body"]
