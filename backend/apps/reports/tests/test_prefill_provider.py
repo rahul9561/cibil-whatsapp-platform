@@ -134,3 +134,34 @@ def test_cut_off_surepass_token_is_reported_at_startup(settings, token, warned):
     ids = [m.id for m in check_surepass(None)]
     assert ("core.W014" in ids) is warned
     assert all(m.level < checks.ERROR for m in check_surepass(None))  # a warning, not a blocked start
+
+
+def test_live_surepass_shape_with_details_wrapper_is_read(two_providers, monkeypatch):
+    """The live API (2026-11-27) nests the person under data.details, unlike the earlier sample. Missing
+    that made every real lookup look like "not found". Same structure as the live response, made-up values."""
+    live = {
+        "data": {
+            "client_id": "prefill_by_mobile_TESTCLIENT",
+            "mobile": "9800066602",
+            "details": {
+                "personal_info": {"full_name": "VIKRAM MEHTA ", "dob": "1990-01-01", "gender": "Male"},
+                "phone_info": [{"reported_date": "2026-03-15", "type_code": "M", "number": "9800066602"}],
+                "address_info": [
+                    {"address": "1 TEST ROAD", "state": "XX", "type": "Primary", "postal": "100001"}
+                ],
+                "email_info": [{"reported_date": "2026-06-30", "email_address": "VIKRAM@EXAMPLE.COM"}],
+                "identity_info": {
+                    "pan_number": [{"id_number": "ABCPM1234Z"}],
+                    "aadhaar_number": [{"id_number": "XXXXXXXXXXXX"}],
+                    "other_id": [{"id_number": "00000000000000"}],
+                },
+            },
+        },
+        "status_code": 200,
+        "success": True,
+        "message": "Success",
+        "message_code": "success",
+    }
+    monkeypatch.setattr(two_providers, "post", lambda url, **kw: FakeResponse(200, live))
+    found = get_prefill_provider().prefill_by_mobile("919800066602", "consent-2")
+    assert (found.full_name, found.pan, found.gender) == ("VIKRAM MEHTA", "ABCPM1234Z", "M")

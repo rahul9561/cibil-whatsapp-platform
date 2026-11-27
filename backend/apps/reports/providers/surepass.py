@@ -106,12 +106,17 @@ class SurepassCreditReportProvider(CreditReportProvider):
             return None  # no record for this number (CONFIRM with Surepass: exact "not found" response)
 
         data = body.get("data") or {}
-        personal = data.get("personal_info") or {}
-        name = " ".join(str(personal.get("full_name") or data.get("name") or "").split())
+        # The live API (2026-11-27) nests everything under data.details; the earlier sample had it directly
+        # under data. Read whichever is present.
+        details = data.get("details") if isinstance(data.get("details"), dict) else data
+        personal = details.get("personal_info") or {}
+        name = " ".join(
+            str(personal.get("full_name") or details.get("name") or data.get("name") or "").split()
+        )
         gender = {"male": "M", "female": "F"}.get(str(personal.get("gender") or "").strip().lower(), "")
         pans = {
             str(item.get("id_number") or "").strip().upper()
-            for item in ((data.get("identity_info") or {}).get("pan_number") or [])
+            for item in ((details.get("identity_info") or {}).get("pan_number") or [])
             if isinstance(item, dict)
         }
         pans = {p for p in pans if PAN_RE.match(p)}
