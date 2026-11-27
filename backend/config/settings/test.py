@@ -48,3 +48,21 @@ REPORT_FILE_ENCRYPTION_KEYS = [
     "t1:dGVzdC1maWxlLWtleS0xLTAwMDAwMDAwMDAwMDAwMDA=",
     "t0:dGVzdC1maWxlLWtleS0wLTAwMDAwMDAwMDAwMDAwMDA=",
 ]
+# Most flow tests start in English; language tests switch this on.
+WHATSAPP_ASK_LANGUAGE = False
+
+# Tests never talk to a real service, whatever the container's .env holds (2026-11-26: PREFILL_PROVIDER and a
+# working SUREPASS token leaked in from the environment and the suite made real Surepass lookups).
+# conftest.py additionally blocks every real HTTP request.
+PREFILL_PROVIDER = ""
+SUREPASS_API_TOKEN = ""
+SUREPASS_PREFILL_TOKEN = ""
+BUREAU_B_BASE_URL = ""
+BUREAU_B_AUTHKEY = ""
+RAZORPAY_KEY_ID = ""
+RAZORPAY_KEY_SECRET = ""
+RAZORPAY_WEBHOOK_SECRET = ""
+WHATSAPP_ACCESS_TOKEN = ""
+WHATSAPP_APP_SECRET = ""
+WHATSAPP_VERIFY_TOKEN = ""
+WHATSAPP_PHONE_NUMBER_ID = ""

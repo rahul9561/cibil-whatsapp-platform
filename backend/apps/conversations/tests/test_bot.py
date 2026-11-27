@@ -56,7 +56,7 @@ def test_full_conversation_from_hi_to_delivered_pdf():
     r = say("15/01/1990")
     assert state() == S.CONFIRM_DETAILS
     assert "R*** S***" in texts(r) and "AB******4F" in texts(r) and "1990" not in texts(r)
-    assert r[-1]["buttons"] == ["confirm", "edit"]
+    assert r[-1]["buttons"] == ["confirm", "edit", "reset"]
 
     r = say(button="confirm")
     assert "Do you agree?" in texts(r) and r[-1]["buttons"] == ["agree", "decline"]

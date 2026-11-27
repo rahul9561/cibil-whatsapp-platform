@@ -63,7 +63,7 @@ def start(wa=OWN_NO_RECORD):
 def test_not_found_offers_another_number_and_the_report_uses_it(fetched_mobiles):
     r = start()
     assert "couldn't find any credit details linked to this WhatsApp number (+91 98******29)" in texts(r)
-    assert state(OWN_NO_RECORD) == S.ASK_ALT_MOBILE and r[-1]["buttons"] == ["type_details"]
+    assert state(OWN_NO_RECORD) == S.ASK_ALT_MOBILE and r[-1]["buttons"] == ["type_details", "reset"]
 
     r = say(OWN_NO_RECORD, ALT)
     shown = texts(r)
@@ -73,7 +73,9 @@ def test_not_found_offers_another_number_and_the_report_uses_it(fetched_mobiles)
 
     r = say(OWN_NO_RECORD, "pfill 0017p")
     shown = texts(r)
-    assert "R*** S***" in shown and "PF******7P" in shown and r[-1]["buttons"] == ["confirm", "not_me"]
+    assert (
+        "R*** S***" in shown and "PF******7P" in shown and r[-1]["buttons"] == ["confirm", "not_me", "reset"]
+    )
     assert Customer.objects.by_wa_id(OWN_NO_RECORD).get().pan == ""  # still not stored until confirmed
 
     r = say(OWN_NO_RECORD, button="confirm")

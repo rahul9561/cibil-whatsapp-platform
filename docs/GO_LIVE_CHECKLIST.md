@@ -12,8 +12,13 @@ Tick every item before real customers are let in. Items marked **(blocking)** ar
 - [ ] DPDP Act 2023: data-retention schedule, erasure procedure and breach-response contact agreed.
 
 ## Integrations
-- [ ] **(blocking)** `CREDIT_PROVIDER=surepass` with a production `SUREPASS_API_TOKEN`; one real report fetched
-      and saved end to end. `ALLOW_MOCK_ADAPTERS` is unset.
+- [ ] **(blocking)** `CREDIT_PROVIDER=smartauth` with production `BUREAU_B_BASE_URL` and `BUREAU_B_AUTHKEY`; one
+      real report fetched, its PDF (befisc_reportforge) checked by eye (layout, score, all pages) and delivered
+      end to end. `ALLOW_MOCK_ADAPTERS` is unset. (`surepass` remains available as an alternative.)
+- [ ] SmartAuth confirmed: mobile format (10 digits vs 91…), the "no credit history" response (status 1
+      without `TrueLinkCreditReport`?) and billing of timed-out calls.
+- [ ] befisc_reportforge: a new version is used by changing the pinned commit in
+      `backend/requirements/base.txt` after review; never an unpinned `git+…` line.
 - [ ] **(blocking)** Surepass has no OTP step: legal sign-off that consent + WhatsApp number + PAN guard is an
       acceptable verification for releasing a credit report, or a provider flow with OTP is used instead.
 - [ ] Surepass confirmed: no-hit response format, accepted gender values, billing of timed-out calls,

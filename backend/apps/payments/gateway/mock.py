@@ -28,7 +28,11 @@ def _ref_key(reference_id):
     return f"mockpay:ref:{reference_id}"
 
 
-def simulate_payment(link_id: str, amount_paise: int | None = None, currency: str = "INR") -> str:
+def simulate_payment(
+    link_id: str, amount_paise: int | None = None, currency: str = "INR", customer_fee_paise: int = 0
+) -> str:
+    """Pay a mock link. `customer_fee_paise` mimics Razorpay's "customer fee bearer" setting: the customer
+    pays price + fee, the payment carries that fee, and only the price counts towards the link."""
     state = cache.get(_link_key(link_id))
     if state is None:
         raise PermanentError("unknown link", code="link_not_found")
@@ -37,10 +41,11 @@ def simulate_payment(link_id: str, amount_paise: int | None = None, currency: st
     state["payments"].append(
         {
             "payment_id": payment_id,
-            "amount_paise": amount,
+            "amount_paise": amount + customer_fee_paise,
             "currency": currency,
             "status": "captured",
             "method": "upi",
+            "fee_paise": customer_fee_paise,
         }
     )
     state["amount_paid_paise"] += amount

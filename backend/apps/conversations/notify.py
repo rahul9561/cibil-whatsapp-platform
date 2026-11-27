@@ -12,7 +12,7 @@ from apps.core.integrations import IntegrationError
 from apps.messaging.services import MessagingService
 from apps.reports.models import ReportRequest, ReportStatus
 
-from . import copy as t
+from .i18n import copy_for
 from .models import Conversation
 from .models import ConversationState as S
 
@@ -36,6 +36,7 @@ def _tell(req: ReportRequest, text: str, key: str) -> None:
 
 def report_outcome(request_id) -> None:
     req = ReportRequest.objects.select_related("customer").get(pk=request_id)
+    t = copy_for(req.customer.language)
     waiting = {S.FETCHING_REPORT, S.AWAITING_OTP, S.OTP_FAILED}
     if req.report_status == ReportStatus.GENERATED:
         _move(req, waiting, S.AWAITING_PAYMENT)  # the payment link itself is sent by the payments task

@@ -9,3 +9,6 @@ django-otp==1.7.5
 django-filter==26.2
 drf-spectacular==0.30.0
 razorpay==2.0.1
+# CIBIL report PDF from the bureau's JSON (SmartAuth): the business's own package, pinned to one commit
+# so every build installs exactly the reviewed code. Zip download: no git needed in the image.
+befisc-reportforge @ https://github.com/rahul9561/befisccibilreport/archive/7301deb59be2cbb30524449d7a0eb7dd1cbe5ddd.zip

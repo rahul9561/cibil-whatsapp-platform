@@ -28,4 +28,5 @@ ignore = ["S101"]  # assert is fine in tests
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S105", "S106"]
+"apps/conversations/i18n.py" = ["E501"]  # translated prose: long lines are easier to review whole
 "config/settings/test.py" = ["S105"]

@@ -43,6 +43,10 @@ class WhatsAppGateway(ABC):
     def send_buttons(self, to: str, body: str, buttons: list[Button]) -> SendResult: ...
 
     @abstractmethod
+    def send_list(self, to: str, body: str, button_text: str, rows: list[Button]) -> SendResult:
+        """Interactive list: one button opening up to 10 choices (reply buttons allow only 3)."""
+
+    @abstractmethod
     def send_template(
         self,
         to: str,

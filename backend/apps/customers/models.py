@@ -16,6 +16,14 @@ WA_ID_PURPOSE = "customer.wa_id"
 PAN_PURPOSE = "customer.pan"
 
 
+class Language(models.TextChoices):
+    ENGLISH = "en", "English"
+    HINDI = "hi", "हिंदी (Hindi)"
+    PUNJABI = "pa", "ਪੰਜਾਬੀ (Punjabi)"
+    TELUGU = "te", "తెలుగు (Telugu)"
+    TAMIL = "ta", "தமிழ் (Tamil)"
+
+
 class Gender(models.TextChoices):
     MALE = "M", "Male"
     FEMALE = "F", "Female"
@@ -40,6 +48,8 @@ class Customer(UUIDModel):
     email = EncryptedTextField(blank=True, default="")
     pincode = EncryptedTextField(blank=True, default="")
     gender = models.CharField(max_length=1, choices=Gender.choices, blank=True)
+    # Chosen on first contact (empty = not asked yet); every bot message uses it.
+    language = models.CharField(max_length=5, choices=Language.choices, blank=True)
     opted_out_at = models.DateTimeField(null=True, blank=True)
     anonymised_at = models.DateTimeField(null=True, blank=True)
 

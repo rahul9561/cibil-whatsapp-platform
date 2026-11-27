@@ -8,8 +8,11 @@ RUN apt-get update \
 WORKDIR /build
 COPY requirements/ requirements/
 ARG REQUIREMENTS=prod
-# Generous timeout/retries: slow or flaky connections to PyPI should not fail the build.
-RUN pip wheel --timeout 120 --retries 10 --wheel-dir /wheels -r requirements/${REQUIREMENTS}.txt
+# Generous timeout/retries: slow or flaky connections to PyPI should not fail the build. The pip cache
+# survives between builds (BuildKit cache mount), so a failed or changed build doesn't download everything
+# again: a corrupted download on a slow link once cost an hour (2026-11-26).
+RUN --mount=type=cache,target=/root/.cache/pip \
+    PIP_NO_CACHE_DIR= pip wheel --timeout 120 --retries 10 --wheel-dir /wheels -r requirements/${REQUIREMENTS}.txt
 
 
 FROM python:3.11-slim-bookworm AS runtime

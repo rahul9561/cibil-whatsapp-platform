@@ -459,7 +459,7 @@ class CreditReportProvider(ABC):
 - Implementations: `MockCreditReportProvider` (deterministic scenarios driven by test PAN values:
   success, no-hit, invalid OTP, timeout), `UnconfiguredProvider` (raises a clear error in prod if not set).
   The real adapter is written only once the authorised partner's documentation is available.
-- If the provider returns structured data but no PDF, a `ReportRenderer` (WeasyPrint/HTML template)
+- If the provider returns structured data but no PDF, a renderer (SmartAuth: `befisc_reportforge`)
   builds the PDF — layout and branding rules depend on the provider agreement. **[OPEN]**
 - `WhatsAppGateway`: `send_text`, `send_interactive`, `send_template`, `upload_media`, `send_document`,
   webhook signature verification (`X-Hub-Signature-256`, app secret) and verify-token handshake.

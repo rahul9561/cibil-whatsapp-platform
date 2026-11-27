@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from apps.audit import service as audit
 from apps.audit.models import ActorType
+from apps.conversations.i18n import copy_for
 from apps.core.integrations import PermanentError
 from apps.messaging.services import MessagingService
 from apps.reports.models import ReportRequest, ReportStatus
@@ -134,8 +135,9 @@ class PaymentService:
         amount = format_rupees(link.amount_paise)
         msg = self.messaging.send(
             req.customer,
-            text=f"Your credit report ({req.public_ref}) is ready. Pay {amount} here to receive the PDF: "
-            f"{link.short_url}",
+            text=copy_for(req.customer.language).PAYMENT_LINK_TEXT.format(
+                ref=req.public_ref, amount=amount, url=link.short_url
+            ),
             template_key="payment_reminder" if is_reminder else "payment_link",
             template_params=[req.public_ref, amount, link.short_url],
             idempotency_key=f"paylink:{link.pk}:{link.sent_count + 1}",
@@ -197,10 +199,13 @@ class PaymentService:
             problems.append("reference_id")
         if state.currency != link.currency or any(p.currency != link.currency for p in captured):
             problems.append("currency")
-        if (
-            sum(p.amount_paise for p in captured) != link.amount_paise
-            or state.amount_paise != link.amount_paise
-        ):
+        # Razorpay's "customer fee bearer" setting adds its fee on top: the customer pays e.g. ₹99.48 for a
+        # ₹99 link and Razorpay keeps ₹0.48. The fee comes from Razorpay's own payment record, so the
+        # price is checked against the amount either with or without it - never against what was typed.
+        gross = sum(p.amount_paise for p in captured)
+        net = sum(p.amount_paise - p.fee_paise for p in captured)
+        customer_paid_fee = gross != link.amount_paise and net == link.amount_paise
+        if state.amount_paise != link.amount_paise or link.amount_paise not in (gross, net):
             problems.append("amount")
         if problems:
             audit.record(
@@ -224,7 +229,8 @@ class PaymentService:
                     razorpay_payment_id=p.payment_id,
                     defaults={
                         "payment_link": link,
-                        "amount_paise": p.amount_paise,
+                        # What we receive for the report (the price): revenue and refunds use ₹99, not ₹99.48.
+                        "amount_paise": p.amount_paise - p.fee_paise if customer_paid_fee else p.amount_paise,
                         "currency": p.currency,
                         "method": p.method,
                         "razorpay_order_id": p.order_id,
@@ -239,7 +245,11 @@ class PaymentService:
                 "payment.captured",
                 actor_type=ActorType.SYSTEM,
                 obj=link,
-                changes={"amount_paise": link.amount_paise, "payments": [p.payment_id for p in captured]},
+                changes={
+                    "amount_paise": link.amount_paise,
+                    "payments": [p.payment_id for p in captured],
+                    "customer_paid_gateway_fee_paise": gross - net if customer_paid_fee else 0,
+                },
             )
             if duplicate:
                 # Customer paid two links for one report: record it and flag for a refund, don't hide it.

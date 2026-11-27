@@ -232,10 +232,80 @@ def test_submit_is_sequential_reports_each_result_and_hides_the_token(monkeypatc
     assert upload["headers"]["file_offset"] == "0" and upload["data"].startswith(b"%PDF")
 
 
+def _clear_meta_env(monkeypatch, script):
+    for name, aliases in script.ALIASES.items():
+        for n in (name, *aliases):
+            monkeypatch.delenv(n, raising=False)
+
+
 def test_submit_without_env_exits_without_calling(monkeypatch):
     script = load_script()
-    for n in ("WABA_ID", "META_ACCESS_TOKEN", "GRAPH_API_VERSION", "META_APP_ID"):
-        monkeypatch.delenv(n, raising=False)
+    _clear_meta_env(monkeypatch, script)
+    monkeypatch.setattr(script, "Graph", lambda *a, **k: pytest.fail("must not call Meta"))
     with pytest.raises(SystemExit) as exc:
         script.main(["--submit"])
     assert "Missing environment variable" in str(exc.value)
+    assert "WABA_ID or WHATSAPP_BUSINESS_ACCOUNT_ID" in str(exc.value)
+
+
+def test_project_env_names_are_used(monkeypatch):
+    """Inside the web container the app's own .env names are enough."""
+    import requests
+
+    script = load_script()
+    _clear_meta_env(monkeypatch, script)
+    for k, v in {
+        "WHATSAPP_BUSINESS_ACCOUNT_ID": "777",
+        "WHATSAPP_ACCESS_TOKEN": TOKEN,
+        "WHATSAPP_APP_ID": "456",
+    }.items():
+        monkeypatch.setenv(k, v)
+    session = FakeSession()
+    monkeypatch.setattr(requests, "Session", lambda: session)
+    with redirect_stdout(io.StringIO()):
+        script.main(["--submit", "--only", "report_expired"])
+    ((_, url, _),) = session.calls
+    assert url == "https://graph.facebook.com/v21.0/777/message_templates"  # default version
+    assert session.headers["Authorization"] == f"Bearer {TOKEN}"
+
+
+class AlreadySubmittedSession(FakeSession):
+    """Meta's real answer when the same name + language was submitted before (2026-11-25)."""
+
+    def post(self, url, **kw):
+        self.calls.append(("POST", url, kw))
+        return FakeResponse(
+            400,
+            {
+                "error": {
+                    "message": "Invalid parameter",
+                    "code": 100,
+                    "error_subcode": 2388024,
+                    "error_user_msg": "There is already English content for this template.",
+                }
+            },
+        )
+
+    def get(self, url, **kw):
+        self.calls.append(("GET", url, kw))
+        name = kw["params"]["name"]
+        row = {"id": "2697869683999132", "name": name, "language": "en", "status": "PENDING"}
+        return FakeResponse(200, {"data": [{**row, "category": "UTILITY", "rejected_reason": "NONE"}]})
+
+
+def test_resubmitting_shows_the_existing_template_instead_of_failing(monkeypatch):
+    import requests
+
+    script = load_script()
+    _clear_meta_env(monkeypatch, script)
+    for k, v in {"WABA_ID": "123", "META_ACCESS_TOKEN": TOKEN, "META_APP_ID": "456"}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr(requests, "Session", AlreadySubmittedSession)
+    out = io.StringIO()
+    with redirect_stdout(out):
+        assert script.main(["--submit", "--only", "report_expired"]) == 0  # not an error
+    text = out.getvalue()
+    assert (
+        "report_expired_v1: already submitted (id=2697869683999132 status=PENDING category=UTILITY)" in text
+    )
+    assert "0 submitted, 1 already submitted, 0 failed." in text and "FAILED" not in text

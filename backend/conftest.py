@@ -23,3 +23,19 @@ def _reset_mock_whatsapp():
     MockWhatsAppGateway.fail_next = None
     yield
     MockWhatsAppGateway.fail_next = None
+
+
+@pytest.fixture(autouse=True)
+def _no_real_network(monkeypatch):
+    """No test may reach a real service (bureau, payment, WhatsApp): every real HTTP request fails the test.
+
+    Tests that exercise an adapter hand it a fake session, which never gets this far.
+    """
+    import requests.adapters
+
+    def refuse(self, request, *args, **kwargs):
+        raise RuntimeError(
+            f"real network call during tests blocked: {request.method} {request.url.split('?')[0]}"
+        )
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)

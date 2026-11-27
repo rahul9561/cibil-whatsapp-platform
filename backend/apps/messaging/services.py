@@ -35,6 +35,7 @@ def checked_params(template_key: str, params) -> list[str]:
         raise TemplateParamMismatch(str(exc)) from exc
 
 
+MAX_REPLY_BUTTONS = 3
 IDEMPOTENCY_KEY_MAX = MessageLog._meta.get_field("idempotency_key").max_length
 
 
@@ -116,6 +117,7 @@ class MessagingService:
         *,
         text: str | None = None,
         buttons: list[Button] | None = None,
+        list_button: str = "",
         template_key: str | None = None,
         template_params: list[str] | tuple = (),
         idempotency_key: str | None = None,
@@ -123,7 +125,9 @@ class MessagingService:
         sent_by=None,
         is_reminder: bool = False,
     ) -> MessageLog:
-        """Free-form text inside the 24 h window, otherwise the approved template (if one is given)."""
+        """Free-form text inside the 24 h window, otherwise the approved template (if one is given).
+
+        More than 3 buttons are sent as a list menu opened by `list_button`."""
         if is_reminder and customer.is_opted_out:
             raise CustomerOptedOut()
         if template_key:  # validated even when free text wins, so a bad call site fails in tests too
@@ -156,6 +160,8 @@ class MessagingService:
         to = customer.wa_id
         if mode == "text":
             return self._dispatch(row, lambda: self.gw.send_text(to, text))
+        if mode == "buttons" and len(buttons) > MAX_REPLY_BUTTONS:  # WhatsApp: 3 buttons, else a list
+            return self._dispatch(row, lambda: self.gw.send_list(to, text, list_button or "Choose", buttons))
         if mode == "buttons":
             return self._dispatch(row, lambda: self.gw.send_buttons(to, text, buttons))
         return self._dispatch(

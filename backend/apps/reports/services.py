@@ -7,6 +7,7 @@ guards each external call so two workers never call the provider for the same re
 The provider is never called while a DB row lock is held.
 """
 
+import contextlib
 import hashlib
 import re
 from datetime import date, timedelta
@@ -18,13 +19,14 @@ from django.utils import timezone
 
 from apps.audit import service as audit
 from apps.audit.models import ActorType
+from apps.conversations.i18n import copy_for
 from apps.core.integrations import NotConfiguredError, PermanentError, distributed_lock
 from apps.customers.models import ConsentRecord
 from apps.messaging.services import MessagingService
 from apps.payments.models import PaymentLinkStatus
 
 from .models import DeliveryStatus, InvalidTransition, ReportDocument, ReportRequest, ReportStatus
-from .providers import get_provider
+from .providers import get_prefill_provider, get_provider
 from .providers.base import Applicant, OtpSession, Prefill, ReportOutcome, VerifyOutcome
 from .storage import ReportStorage
 
@@ -98,7 +100,8 @@ class ReportService:
         req = ReportRequest.objects.select_related("customer").get(pk=request_id)
         if not req.consent_id:
             raise InvalidTransition(f"{req.public_ref}: consent is required before a bureau lookup")
-        if not self.provider.supports_prefill:
+        prefill_provider = get_prefill_provider()
+        if prefill_provider is None:
             return None
         key = f"prefill-count:{req.customer_id}"
         cache.add(key, 0, timeout=24 * 60 * 60)
@@ -111,13 +114,29 @@ class ReportService:
             _system("report.prefill", req, outcome="daily_limit")
             raise PrefillLimitReached()
         alternate = bool(mobile) and mobile != req.customer.wa_id
-        result = self.provider.prefill_by_mobile(mobile or req.customer.wa_id, str(req.consent_id))
+        try:
+            result = prefill_provider.prefill_by_mobile(mobile or req.customer.wa_id, str(req.consent_id))
+        except Exception as exc:
+            # Only answered lookups use up the daily allowance: a refused call (bad token, provider down)
+            # must not lock the customer out for the day (2026-11-26: three 401s did exactly that).
+            with contextlib.suppress(ValueError):  # counter already expired
+                cache.decr(key)
+            _system(
+                "report.prefill",
+                req,
+                outcome="error",
+                code=getattr(exc, "code", type(exc).__name__),
+                alternate_mobile=alternate,
+                prefill_provider=prefill_provider.name,
+            )
+            raise
         _system(
             "report.prefill",
             req,
             outcome="found" if result else "not_found",
             pan_found=bool(result and result.pan),
             alternate_mobile=alternate,
+            prefill_provider=prefill_provider.name,
         )
         return result
 
@@ -407,7 +426,7 @@ class ReportService:
                 req.customer,
                 content=content,
                 filename=f"credit-report-{req.public_ref}.pdf",
-                caption=f"Your credit report {req.public_ref}. Thank you for your payment.",
+                caption=copy_for(req.customer.language).DELIVERY_CAPTION.format(ref=req.public_ref),
                 template_params=[req.public_ref],
                 idempotency_key=f"deliver:{req.pk}",
                 related_request=req,

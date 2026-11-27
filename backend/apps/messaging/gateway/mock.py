@@ -44,6 +44,9 @@ class MockWhatsAppGateway(WhatsAppGateway):
     def send_buttons(self, to, body, buttons: list[Button]):
         return self._record(to, "buttons", body=body, buttons=[b.id for b in buttons])
 
+    def send_list(self, to, body, button_text, rows: list[Button]):
+        return self._record(to, "list", body=body, button_text=button_text, buttons=[r.id for r in rows])
+
     def send_template(self, to, template, language, params, document_media_id=None, document_filename=None):
         return self._record(
             to,

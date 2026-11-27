@@ -39,3 +39,4 @@ Thumbs.db
 
 # Local production smoke-test certificates
 infrastructure/compose/local-certs/
+backend/.cache/

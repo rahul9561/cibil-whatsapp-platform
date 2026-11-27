@@ -51,7 +51,7 @@ def _reset_conversation(
 
 @shared_task(name="reports.expire_stale_requests")
 def expire_stale_requests() -> dict:
-    from apps.conversations import copy as t
+    from apps.conversations.i18n import copy_for
     from apps.conversations.models import Conversation
 
     from .tasks import fetch_report_task
@@ -91,7 +91,7 @@ def expire_stale_requests() -> dict:
             service.expire(req.pk, reason="abandoned")
         except InvalidTransition:
             continue  # moved on meanwhile
-        _reset_conversation(req, t.REQUEST_TIMED_OUT, "timed_out")
+        _reset_conversation(req, copy_for(req.customer.language).REQUEST_TIMED_OUT, "timed_out")
         result["abandoned"] += 1
 
     # 2. Generated but never paid within its validity window.
@@ -105,7 +105,7 @@ def expire_stale_requests() -> dict:
             continue
         _reset_conversation(
             req,
-            t.REPORT_EXPIRED.format(ref=req.public_ref),
+            copy_for(req.customer.language).REPORT_EXPIRED.format(ref=req.public_ref),
             "expired",
             template_key="report_expired",  # days after the last message: almost always outside the window
             template_params=[req.public_ref],

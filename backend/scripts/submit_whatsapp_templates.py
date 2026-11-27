@@ -9,12 +9,13 @@ so the approved wording and the parameters we send cannot drift apart.
     python scripts/submit_whatsapp_templates.py --status      # shows the current approval status
     python scripts/submit_whatsapp_templates.py --submit --only report_delivery
 
-Environment (never pass the token on the command line, where it lands in shell history):
-    WABA_ID              WhatsApp Business Account ID (not the phone number ID)
-    META_ACCESS_TOKEN    System User token with whatsapp_business_management
-    GRAPH_API_VERSION    e.g. v21.0. Use the version your app is on.
+Environment (never pass the token on the command line, where it lands in shell history). Inside the web
+container the app's own .env names are used automatically (in brackets):
+    WABA_ID              WhatsApp Business Account ID, not the phone number ID [WHATSAPP_BUSINESS_ACCOUNT_ID]
+    META_ACCESS_TOKEN    System User token with whatsapp_business_management [WHATSAPP_ACCESS_TOKEN]
+    GRAPH_API_VERSION    e.g. v21.0 (default) [WHATSAPP_GRAPH_VERSION]
     META_APP_ID          Meta app ID. Needed only to upload the sample PDF that Meta requires for the
-                         document header of report_delivery_v1 (Resumable Upload API).
+                         document header of report_delivery_v1 (Resumable Upload API). [WHATSAPP_APP_ID]
     SAMPLE_PDF_PATH      optional: your own sample PDF for that header. Without it a one-page specimen with
                          no personal data is generated. Never use a real customer's report.
 
@@ -165,9 +166,28 @@ class Graph:
 # --- commands --------------------------------------------------------------------------------------------
 
 
+# Each setting can come from its own name or from the name the app already uses in .env, so the script runs
+# inside the web container with no extra configuration.
+ALIASES = {
+    "WABA_ID": ("WHATSAPP_BUSINESS_ACCOUNT_ID",),
+    "META_ACCESS_TOKEN": ("WHATSAPP_ACCESS_TOKEN",),
+    "GRAPH_API_VERSION": ("WHATSAPP_GRAPH_VERSION",),
+    "META_APP_ID": ("WHATSAPP_APP_ID",),
+}
+DEFAULTS = {"GRAPH_API_VERSION": "v21.0"}  # same default as settings.WHATSAPP_GRAPH_VERSION
+
+
+def env_value(name: str) -> str:
+    for candidate in (name, *ALIASES.get(name, ())):
+        value = os.environ.get(candidate, "").strip()
+        if value:
+            return value
+    return DEFAULTS.get(name, "")
+
+
 def require_env(*names: str) -> dict[str, str]:
-    values = {n: os.environ.get(n, "").strip() for n in names}
-    missing = [n for n, v in values.items() if not v]
+    values = {n: env_value(n) for n in names}
+    missing = [" or ".join((n, *ALIASES.get(n, ()))) for n, v in values.items() if not v]
     if missing:
         sys.exit("Missing environment variable(s): " + ", ".join(missing))
     return values
@@ -191,10 +211,27 @@ def dry_run(templates: list[TemplateDef]) -> int:
         data, name = sample_pdf()
         print(f"Document header sample: {name}, {len(data)} bytes, uploaded with META_APP_ID at submit time.")
     present = [
-        n for n in ("WABA_ID", "META_ACCESS_TOKEN", "GRAPH_API_VERSION", "META_APP_ID") if os.environ.get(n)
+        n for n in ("WABA_ID", "META_ACCESS_TOKEN", "GRAPH_API_VERSION", "META_APP_ID") if env_value(n)
     ]
     print("Environment variables present: " + (", ".join(present) or "none") + " (values not shown)")
     return 0
+
+
+# Meta's error subcode for "There is already <language> content for this template".
+ALREADY_EXISTS_SUBCODE = "subcode 2388024"
+
+
+def _current_status(graph: "Graph", waba_id: str, t: TemplateDef) -> str:
+    try:
+        rows = graph.template_status(waba_id, t.default_name)
+    except Exception:
+        return "status lookup failed; check with --status"
+    row = next((r for r in rows if r.get("language") == t.language), rows[0] if rows else None)
+    if row is None:
+        return "not visible to this token"
+    reason = row.get("rejected_reason")
+    extra = f" rejected_reason={reason}" if reason and reason != "NONE" else ""
+    return f"id={row.get('id')} status={row.get('status')} category={row.get('category')}{extra}"
 
 
 def submit(templates: list[TemplateDef]) -> int:
@@ -203,7 +240,7 @@ def submit(templates: list[TemplateDef]) -> int:
         names.append("META_APP_ID")
     env = require_env(*names)
     graph = Graph(env["GRAPH_API_VERSION"], env["META_ACCESS_TOKEN"])
-    failures = 0
+    failures = existing = 0
     handle = None
     for t in templates:  # sequential on purpose: one failure is reported and the rest still go
         print(f"-> {t.default_name}: ", end="", flush=True)
@@ -213,6 +250,10 @@ def submit(templates: list[TemplateDef]) -> int:
                 handle = graph.upload_sample(env["META_APP_ID"], data, filename)
             result = graph.create_template(env["WABA_ID"], build_payload(t, handle))
         except GraphError as exc:
+            if ALREADY_EXISTS_SUBCODE in str(exc):  # same name + language submitted before
+                existing += 1
+                print(f"already submitted ({_current_status(graph, env['WABA_ID'], t)})")
+                continue
             failures += 1
             print(f"FAILED {exc}")
             continue
@@ -221,8 +262,13 @@ def submit(templates: list[TemplateDef]) -> int:
             print(f"FAILED {type(exc).__name__}")
             continue
         print(f"id={result.get('id')} status={result.get('status')} category={result.get('category')}")
-    print(f"\n{len(templates) - failures} submitted, {failures} failed.")
-    if failures == 0:
+    submitted = len(templates) - failures - existing
+    print(f"\n{submitted} submitted, {existing} already submitted, {failures} failed.")
+    if existing:
+        print(
+            "An existing template can't be submitted again. To change its wording, use a new name (e.g. _v2)."
+        )
+    if submitted and not failures:
         print("Approval usually takes minutes to a day. Check with --status.")
     return 1 if failures else 0
 

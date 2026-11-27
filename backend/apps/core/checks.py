@@ -2,7 +2,7 @@
 
 from cryptography.fernet import Fernet
 from django.conf import settings
-from django.core.checks import Error, Tags, register
+from django.core.checks import Error, Tags, Warning, register
 
 
 @register(Tags.security, deploy=False)
@@ -90,11 +90,44 @@ def check_whatsapp(app_configs, **kwargs):
 
 @register(Tags.security, deploy=False)
 def check_surepass(app_configs, **kwargs):
-    if getattr(settings, "CREDIT_PROVIDER", "") != "surepass":
+    report = getattr(settings, "CREDIT_PROVIDER", "") == "surepass"
+    prefill = getattr(settings, "PREFILL_PROVIDER", "") == "surepass"
+    if not (report or prefill):
         return []
     errors = []
-    if not settings.SUREPASS_API_TOKEN:
-        errors.append(Error("SUREPASS_API_TOKEN is required when CREDIT_PROVIDER=surepass.", id="core.E010"))
-    if not settings.SUREPASS_BASE_URL.startswith("https://"):
+    # Prefill may use its own token; it falls back to the main one (same rule as the adapter).
+    token = (settings.SUREPASS_PREFILL_TOKEN if prefill else "") or settings.SUREPASS_API_TOKEN
+    if not token:
+        errors.append(
+            Error(
+                "SUREPASS_API_TOKEN is required when Surepass is the report or prefill provider.",
+                id="core.E010",
+            )
+        )
+    elif token.count(".") != 2 or token.endswith(">"):
+        # A JWT has three dot-separated parts. Copying it from a terminal or editor that cuts long lines
+        # (trailing ">") silently breaks every lookup with an authentication error (2026-11-26).
+        errors.append(
+            Warning(
+                "SUREPASS token looks cut off (a complete token has 3 parts separated by dots).",
+                hint="Copy it again with Surepass's Copy button and paste it on one line in .env.",
+                id="core.W014",
+            )
+        )
+    if report and not settings.SUREPASS_BASE_URL.startswith("https://"):
         errors.append(Error("SUREPASS_BASE_URL must use https.", id="core.E011"))
+    if prefill and not settings.SUREPASS_KYC_BASE_URL.startswith("https://"):
+        errors.append(Error("SUREPASS_KYC_BASE_URL must use https.", id="core.E015"))
+    return errors
+
+
+@register(Tags.security, deploy=False)
+def check_smartauth(app_configs, **kwargs):
+    if getattr(settings, "CREDIT_PROVIDER", "") != "smartauth":
+        return []
+    errors = []
+    if not settings.BUREAU_B_AUTHKEY:
+        errors.append(Error("BUREAU_B_AUTHKEY is required when CREDIT_PROVIDER=smartauth.", id="core.E012"))
+    if not settings.BUREAU_B_BASE_URL.startswith("https://"):
+        errors.append(Error("BUREAU_B_BASE_URL must be set and use https.", id="core.E013"))
     return errors

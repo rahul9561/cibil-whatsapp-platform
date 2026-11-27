@@ -127,6 +127,13 @@ inspected before any change, and nothing is overwritten without confirmation.
   number. "Type my details" is always offered.
 - To confirm with Surepass: the prefill "not found" response;  sandbox URL; accepted gender values; the response for "no credit history";
   whether timed-out calls are billed and can be looked up; whether an OTP/consent-verified variant exists.
+- SmartAuth "bureau B" (client code supplied 2026-11-25) is now the main provider: `CREDIT_PROVIDER=smartauth`,
+  `apps/reports/providers/smartauth.py`. `POST {BUREAU_B_BASE_URL}/TILJ` with an `authkey` header and name,
+  mobile, PAN; it asks only name and PAN (no gender). The PDF is generated on our server from `cibilData`
+  with the business's own `befisc_reportforge` package (GitHub, pinned commit), so storage, delivery and the
+  `report_delivery_v1` template are unchanged and no link from the response is ever downloaded.
+  Prefill-by-mobile (and the alternate-number option) keeps using Surepass when a Surepass token is set.
+  Surepass stays selectable (`CREDIT_PROVIDER=surepass`).
 - Implement the authorised partner's adapter strictly from its documentation; contract tests against its sandbox.
 - Can run in parallel with Phases 8–9 once documentation arrives.
 

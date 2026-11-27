@@ -1,4 +1,8 @@
-"""Every customer-facing bot message, in one place for review and translation (English only for now).
+"""Every customer-facing bot message in English, in one place for review and translation.
+
+Translations (Hindi, Punjabi, Telugu, Tamil) live in i18n.py under the same names; anything not translated
+falls back to the English text here. Commands (HI, CANCEL, STOP, START, HELP, LANGUAGE) stay in English in
+every language because the bot matches them exactly.
 
 CONSENT_TEXT is a DRAFT for legal review (DPDP Act 2023, CICRA 2005, provider agreement). Changing its
 wording requires a new CONSENT_VERSION: the version and a hash of the exact text are stored with each
@@ -68,8 +72,38 @@ LOST_MESSAGE = "Sorry, we couldn't read your last message. Please send it again.
 UNAVAILABLE = "Sorry, this service is not available right now. Please try again later."
 HELP = (
     "Commands:\nHI - start or continue a request\nCANCEL - cancel your current request\n"
-    "STOP - stop reminders\nSTART - turn reminders back on\nHELP - show this message"
+    "RESET - start the chat over\nSTOP - stop reminders\nSTART - turn reminders back on\n"
+    "LANGUAGE - change language\nHELP - show this message"
 )
+
+# Reset: RESET (or the "Start over" button) cancels the open request and forgets the details given so far.
+RESET_DONE = (
+    "Your chat has been reset. Any unfinished request was cancelled and the details you gave were cleared. "
+    "You have not been charged.\n\nTap Start again (or send HI) whenever you're ready."
+)
+BTN_RESET = ("reset", "Start over")
+BTN_START_AGAIN = ("hi", "Start again")
+
+# Language choice: asked first, in all five languages at once (the customer can't read the rest yet).
+CHOOSE_LANGUAGE = (
+    "Please choose your language.\n"
+    "कृपया अपनी भाषा चुनें।\n"
+    "ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੀ ਭਾਸ਼ਾ ਚੁਣੋ।\n"
+    "దయచేసి మీ భాషను ఎంచుకోండి.\n"
+    "உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்."
+)
+LANGUAGE_LIST_BUTTON = "Language / भाषा"
+LANGUAGE_SET = "Done! We'll continue in English. Send LANGUAGE any time to change it."
+
+# Sent by the payments and delivery code (inside the 24-hour window; templates cover outside it).
+PAYMENT_LINK_TEXT = "Your credit report ({ref}) is ready. Pay {amount} here to receive the PDF: {url}"
+DELIVERY_CAPTION = "Your credit report {ref}. Thank you for your payment."
+
+# Labels in the "please check your details" summary.
+LABEL_NAME = "Name"
+LABEL_PAN = "PAN"
+LABEL_DOB = "Date of birth"
+LABEL_GENDER = "Gender"
 
 # Button ids are our own fixed strings (never personal data); titles max 20 characters.
 BTN_CONFIRM = ("confirm", "Yes, correct")

@@ -57,7 +57,7 @@ def test_only_the_phone_number_is_needed():
     assert state(wa) == S.CONFIRM_DETAILS
     shown = texts(r)
     assert "We found these details" in shown and "R*** S***" in shown and "PF******1P" in shown
-    assert "Gender: Male" in shown and r[-1]["buttons"] == ["confirm", "not_me"]
+    assert "Gender: Male" in shown and r[-1]["buttons"] == ["confirm", "not_me", "reset"]
     assert customer(wa).pan == "" and customer(wa).full_name == ""  # not stored until confirmed
 
     r = say(wa, button="confirm")
@@ -78,7 +78,7 @@ def test_not_me_discards_the_lookup_and_asks_for_own_details():
     say(wa, button="agree")
     r = say(wa, button="not_me")
     assert "discarded" in texts(r) and state(wa) == S.ASK_ALT_MOBILE  # maybe a recycled number
-    assert r[-1]["buttons"] == ["type_details"]
+    assert r[-1]["buttons"] == ["type_details", "reset"]
     assert cache.get(f"prefill-pending:{customer(wa).pk}") is None
     assert customer(wa).pan == ""
     say(wa, button="type_details")
@@ -176,3 +176,35 @@ def test_lookup_details_never_reach_logs_or_message_history(caplog):
     logged = " ".join(r.getMessage() for r in caplog.records)
     for secret in ("RAHUL", "PFILL2347P"):
         assert secret not in inbound and secret not in logged
+
+
+def test_agreeing_never_fetches_without_name_and_pan(settings):
+    """A request left waiting at consent while settings changed (prefill turned off, 2026-11-26) used to
+    start the bureau call with no PAN. Now the bot asks for the missing details first."""
+    wa = "919800012350"
+    settings.PREFILL_BY_MOBILE = False  # flow starts without prefill...
+    say(wa, "hi")
+    Conversation.objects.filter(customer=customer(wa)).update(state=S.AWAITING_CONSENT, context={})
+    r = say(wa, button="agree")  # ...customer agrees with nothing typed yet
+    assert "fetching your credit report" not in texts(r) and state(wa) == S.ASK_NAME
+    assert ReportRequest.objects.get().report_status == ReportStatus.CONSENTED  # no failed bureau call
+
+    settings.PREFILL_BY_MOBILE = True  # same situation with prefill on: the lookup runs instead
+    wa2 = "919800012351"
+    say(wa2, "hi")
+    r = say(wa2, button="agree")
+    assert "We found these details" in texts(r)
+
+
+def test_failed_lookups_do_not_use_up_the_daily_allowance(settings):
+    """2026-11-26: three lookups refused by Surepass (cut-off token, 401) hit the daily cap, so the customer
+    was told "you've reached today's limit" before a single lookup had worked."""
+    settings.PREFILL_MAX_PER_DAY = 1
+    wa = "919800012358"  # mock: ...8 = provider down
+    for _ in range(3):
+        say(wa, "hi")
+        r = say(wa, button="agree")
+        assert "couldn't look up your details right now" in texts(r)
+        say(wa, "RESET")
+    assert AuditLog.objects.filter(action="report.prefill", changes__outcome="error").count() == 3
+    assert not AuditLog.objects.filter(action="report.prefill", changes__outcome="daily_limit").exists()

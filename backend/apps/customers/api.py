@@ -43,6 +43,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "pan",
             "email",
             "gender",
+            "language",
             "created_at",
             "opted_out_at",
             "open_request",

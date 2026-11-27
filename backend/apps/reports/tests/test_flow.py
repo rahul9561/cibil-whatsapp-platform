@@ -300,3 +300,28 @@ def test_permanent_delivery_failure_is_recorded():
     req.refresh_from_db()
     assert req.delivery_status == DeliveryStatus.FAILED
     assert MessageLog.objects.get(idempotency_key=f"deliver:{req.pk}").error_code == "recipient_blocked"
+
+
+def test_customer_paid_razorpay_fee_is_accepted_and_recorded_at_the_price():
+    """2026-11-26: a real test payment of ₹99.48 for a ₹99 link (Razorpay "customer fee bearer", fee 48
+    paise) was rejected as an amount mismatch, so the paying customer never got the report."""
+    req, link = _generated()
+    simulate_payment(link.razorpay_link_id, customer_fee_paise=48)
+    confirm_payment_task.delay(link.razorpay_link_id).get()
+    link.refresh_from_db()
+    assert link.status == PaymentLinkStatus.PAID
+    payment = link.payments.get()
+    assert payment.amount_paise == link.amount_paise  # ₹99 for revenue and refunds, not ₹99.48
+    captured = AuditLog.objects.filter(action="payment.captured").latest("created_at")
+    assert captured.changes["customer_paid_gateway_fee_paise"] == 48
+    req.refresh_from_db()
+    assert req.delivery_status == DeliveryStatus.SENT
+
+
+def test_a_fee_does_not_excuse_a_wrong_amount():
+    _, link = _generated()
+    simulate_payment(link.razorpay_link_id, amount_paise=link.amount_paise + 100, customer_fee_paise=48)
+    with pytest.raises(PaymentMismatch):
+        confirm_payment_task.delay(link.razorpay_link_id).get()
+    link.refresh_from_db()
+    assert link.status == PaymentLinkStatus.ACTIVE and not link.payments.exists()

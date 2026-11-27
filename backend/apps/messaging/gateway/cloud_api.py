@@ -101,6 +101,24 @@ class CloudApiWhatsAppGateway(WhatsAppGateway):
             },
         )
 
+    def send_list(self, to, body, button_text, rows: list[Button]):
+        return self._send(
+            to,
+            {
+                "type": "interactive",
+                "interactive": {
+                    "type": "list",
+                    "body": {"text": body[:4096]},
+                    "action": {
+                        "button": button_text[:20],
+                        "sections": [
+                            {"rows": [{"id": r.id[:200], "title": r.title[:24]} for r in rows[:10]]}
+                        ],
+                    },
+                },
+            },
+        )
+
     def send_template(self, to, template, language, params, document_media_id=None, document_filename=None):
         components = []
         if document_media_id:

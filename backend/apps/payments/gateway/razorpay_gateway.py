@@ -109,6 +109,7 @@ class RazorpayGateway(PaymentGateway):
                     status=full["status"],
                     method=full.get("method") or "",
                     order_id=full.get("order_id") or "",
+                    fee_paise=int(full.get("fee") or 0),
                 )
             )
         return LinkState(

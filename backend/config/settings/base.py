@@ -119,11 +119,17 @@ SUREPASS_API_TOKEN = env("SUREPASS_API_TOKEN", default="")
 # Prefill-by-mobile (name/PAN/gender from the customer's number): separate host; token defaults to the above.
 SUREPASS_KYC_BASE_URL = env("SUREPASS_KYC_BASE_URL", default="") or "https://kyc-api.surepass.app"
 SUREPASS_PREFILL_TOKEN = env("SUREPASS_PREFILL_TOKEN", default="")
+# Who looks up name/PAN/gender from the mobile number: a separate provider from CREDIT_PROVIDER
+# (e.g. CREDIT_PROVIDER=smartauth + PREFILL_PROVIDER=surepass). Empty = the report provider's own lookup.
+PREFILL_PROVIDER = env("PREFILL_PROVIDER", default="")
 # Use prefill when the provider supports it: the customer only confirms details instead of typing them.
 PREFILL_BY_MOBILE = env.bool("PREFILL_BY_MOBILE", default=True)
 PREFILL_MAX_PER_DAY = env.int("PREFILL_MAX_PER_DAY", default=3)  # paid lookups per WhatsApp number per day
 # Hosts the report PDF may be downloaded from (the sample response links to an S3 bucket).
 SUREPASS_PDF_HOSTS = env.list("SUREPASS_PDF_HOSTS", default=["amazonaws.com"])
+# SmartAuth "bureau B" CIBIL report API (CREDIT_PROVIDER=smartauth): PDF made here by befisc_reportforge.
+BUREAU_B_BASE_URL = env("BUREAU_B_BASE_URL", default="")
+BUREAU_B_AUTHKEY = env("BUREAU_B_AUTHKEY", default="")
 
 # Razorpay (Phase 6). Test-mode keys start with rzp_test_. Secrets only ever come from the environment.
 RAZORPAY_KEY_ID = env("RAZORPAY_KEY_ID", default="")
@@ -133,6 +139,7 @@ RAZORPAY_WEBHOOK_SECRET = env("RAZORPAY_WEBHOOK_SECRET", default="")
 WHATSAPP_GRAPH_VERSION = env("WHATSAPP_GRAPH_VERSION", default="v21.0")
 WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID", default="")
 WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", default="")
+WHATSAPP_APP_ID = env("WHATSAPP_APP_ID", default="")
 WHATSAPP_APP_SECRET = env("WHATSAPP_APP_SECRET", default="")  # signs inbound webhooks (X-Hub-Signature-256)
 WHATSAPP_VERIFY_TOKEN = env("WHATSAPP_VERIFY_TOKEN", default="")  # echoed in the subscription handshake
 # Seconds an inbound message body may wait in Redis for the worker (it may be an OTP: keep this short).
@@ -162,10 +169,13 @@ FOLLOWUP_MAX_ESCALATION = env.int("FOLLOWUP_MAX_ESCALATION", default=3)
 PAN_GUARD_DAYS = env.int("PAN_GUARD_DAYS", default=30)
 STALE_REQUEST_MINUTES = env.int("STALE_REQUEST_MINUTES", default=60)  # unfinished details/consent/OTP
 WHATSAPP_TEMPLATE_LANGUAGE = env("WHATSAPP_TEMPLATE_LANGUAGE", default="en")
+# Ask new customers to pick English, Hindi, Punjabi, Telugu or Tamil before anything else.
+WHATSAPP_ASK_LANGUAGE = env.bool("WHATSAPP_ASK_LANGUAGE", default=True)
 # Logical name -> approved WhatsApp template name. Needed outside the 24-hour service window.
 # Wording, parameters and defaults live in apps/messaging/templates.py; each name can be overridden by its
 # WA_TEMPLATE_* variable (payment_link, payment_reminder, report_delivery, report_expired).
 WHATSAPP_TEMPLATES = _wa_template_names(env)
+WHATSAPP_APP_ID = env("WHATSAPP_APP_ID", default="")
 
 # --- Sessions / cookies (SPA uses session auth + CSRF, see ARCHITECTURE §6.6) ---
 SESSION_COOKIE_HTTPONLY = True

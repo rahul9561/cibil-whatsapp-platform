@@ -32,6 +32,7 @@ class GatewayPayment:
     status: str  # "captured", "authorized", "failed", "refunded"
     method: str = ""
     order_id: str = ""
+    fee_paise: int = 0  # Razorpay's fee incl. tax; part of amount_paise when the customer bears the fee
 
 
 @dataclass(frozen=True)
