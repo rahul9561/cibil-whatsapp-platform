@@ -41,7 +41,7 @@ RUN if [ "$REQUIREMENTS" = "prod" ]; then \
       REPORT_FILE_ENCRYPTION_KEYS=b:YnVpbGQtb25seS1maWxlLWtleS0wMDAwMDAwMDAwMDA= \
       python manage.py collectstatic --noinput -v 0 && rm -f /tmp/build.sqlite3; \
     fi
-EXPOSE 8000
+EXPOSE 8100
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz', timeout=3).status == 200 else 1)"
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/healthz', timeout=3).status == 200 else 1)"
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "config.wsgi:application"]

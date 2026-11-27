@@ -2,7 +2,7 @@
 
 import os
 
-bind = "0.0.0.0:8000"
+bind = "0.0.0.0:8100"
 workers = int(os.environ.get("GUNICORN_WORKERS", "3"))
 threads = int(os.environ.get("GUNICORN_THREADS", "2"))
 timeout = 60
