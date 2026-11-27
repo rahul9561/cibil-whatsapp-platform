@@ -20,7 +20,7 @@ map $uri $cache_control {
 }
 
 upstream django {
-    server web:8000;
+    server web:8100;
     keepalive 16;
 }
 
