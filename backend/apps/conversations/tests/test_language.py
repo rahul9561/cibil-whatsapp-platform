@@ -61,7 +61,7 @@ def test_choosing_hindi_runs_the_whole_flow_in_hindi():
 
     r = say(wa, button="agree")
     shown = " || ".join(x["body"] for x in r)
-    assert "क्या यह आप हैं?" in shown and "नाम: R*** S***" in shown and "लिंग: पुरुष" in shown
+    assert "क्या यह आप हैं?" in shown and "नाम: RAHUL SHARMA" in shown and "लिंग: पुरुष" in shown
 
     r = say(wa, button="confirm")
     assert "क्रेडिट रिपोर्ट मँगा रहे हैं" in " ".join(x["body"] for x in r)

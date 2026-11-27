@@ -97,7 +97,7 @@ def test_surepass_details_then_smartauth_report(two_providers):
     assert "look up the details" in say("Hi")  # consent first: nothing is looked up before it
     assert two_providers.calls == []
     shown = say(button="agree")
-    assert "Is this you?" in shown and "A*** D***" in shown and "AB******4E" in shown
+    assert "Is this you?" in shown and "ANITA DESAI" in shown and "ABCPD1**4E" in shown
     assert [c[0].rsplit("/", 1)[-1] for c in two_providers.calls] == ["prefill-by-mobile"]  # Surepass only
 
     assert "fetching your credit report" in say(button="confirm")

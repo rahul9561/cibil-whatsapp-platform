@@ -173,3 +173,11 @@ def test_checks_flag_bad_keys(settings):
     settings.FIELD_ENCRYPTION_KEYS = [KEY_A]
     settings.BLIND_INDEX_KEY = KEY_A
     assert "core.E004" in _security_errors()
+
+
+def test_customer_pan_display_hides_only_the_middle_two_digits():
+    from apps.core.masking import mask_pan, mask_pan_digits
+
+    assert mask_pan_digits("abcde1234f") == "ABCDE1**4F"
+    assert mask_pan_digits("") == "" and mask_pan_digits("ABC") == "***"
+    assert mask_pan("ABCDE1234F") == "AB******4F"  # staff screens keep the stronger mask

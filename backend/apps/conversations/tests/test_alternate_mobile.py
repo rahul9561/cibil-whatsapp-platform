@@ -68,13 +68,15 @@ def test_not_found_offers_another_number_and_the_report_uses_it(fetched_mobiles)
     r = say(OWN_NO_RECORD, ALT)
     shown = texts(r)
     assert "We found details linked to +91 98******17" in shown and "type your PAN" in shown
-    assert "R***" not in shown and "PF******" not in shown  # nothing revealed before the PAN check
+    assert "RAHUL" not in shown and "PFILL" not in shown  # nothing revealed before the PAN check
     assert state(OWN_NO_RECORD) == S.VERIFY_ALT_PAN
 
     r = say(OWN_NO_RECORD, "pfill 0017p")
     shown = texts(r)
     assert (
-        "R*** S***" in shown and "PF******7P" in shown and r[-1]["buttons"] == ["confirm", "not_me", "reset"]
+        "RAHUL SHARMA" in shown
+        and "PFILL0**7P" in shown
+        and r[-1]["buttons"] == ["confirm", "not_me", "reset"]
     )
     assert Customer.objects.by_wa_id(OWN_NO_RECORD).get().pan == ""  # still not stored until confirmed
 
@@ -96,7 +98,7 @@ def test_wrong_pan_discards_the_lookup_without_a_second_try(fetched_mobiles):
     r = say(OWN_NO_RECORD, "ABCDE1234F")
     shown = texts(r)
     assert "doesn't match the details linked to +91 98******17" in shown
-    assert "R***" not in shown and state(OWN_NO_RECORD) == S.ASK_NAME
+    assert "RAHUL" not in shown and state(OWN_NO_RECORD) == S.ASK_NAME
     assert AuditLog.objects.filter(action="report.alternate_mobile_rejected").count() == 1
     say(OWN_NO_RECORD, "Anita Desai")
     say(OWN_NO_RECORD, "ABCDE1234F")

@@ -23,7 +23,7 @@ from apps.audit import service as audit
 from apps.audit.models import ActorType
 from apps.core.crypto import blind_index, decrypt_str, encrypt_str
 from apps.core.integrations import LockNotAcquired, PermanentError, TransientError, distributed_lock
-from apps.core.masking import mask_name, mask_pan, mask_phone
+from apps.core.masking import mask_pan_digits, mask_phone
 from apps.customers.models import WA_ID_PURPOSE, Customer, Gender
 from apps.messaging.gateway.base import Button
 from apps.messaging.inbound import take_body
@@ -394,7 +394,9 @@ class Bot:
         name = pending["full_name"] if pending else c.full_name
         pan = pending["pan"] if pending else c.pan
         gender = pending["gender"] if pending else c.gender
-        lines = [f"{self.t.LABEL_NAME}: {mask_name(name)}", f"{self.t.LABEL_PAN}: {mask_pan(pan)}"]
+        # The customer sees their full name and PAN with only the middle two digits hidden (business
+        # decision 2026-11-27); a number registered to someone else still never reveals more than that.
+        lines = [f"{self.t.LABEL_NAME}: {name}", f"{self.t.LABEL_PAN}: {mask_pan_digits(pan)}"]
         if "dob" in self.needed and c.dob and not pending:
             lines.append(f"{self.t.LABEL_DOB}: {c.dob[8:10]}-{c.dob[5:7]}-****")
         if "gender" in self.needed and gender:

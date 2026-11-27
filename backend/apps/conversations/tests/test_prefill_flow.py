@@ -56,7 +56,7 @@ def test_only_the_phone_number_is_needed():
     r = say(wa, button="agree")
     assert state(wa) == S.CONFIRM_DETAILS
     shown = texts(r)
-    assert "We found these details" in shown and "R*** S***" in shown and "PF******1P" in shown
+    assert "We found these details" in shown and "RAHUL SHARMA" in shown and "PFILL2**1P" in shown
     assert "Gender: Male" in shown and r[-1]["buttons"] == ["confirm", "not_me", "reset"]
     assert customer(wa).pan == "" and customer(wa).full_name == ""  # not stored until confirmed
 
